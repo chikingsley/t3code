@@ -12,7 +12,7 @@ import {
 } from "react-native";
 import { KeyboardAvoidingView, KeyboardStickyView } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import ImageViewing from "react-native-image-viewing";
+import ImageViewing from "../../components/ImageViewing";
 
 import { AppText as Text, AppTextInput as TextInput } from "../../components/AppText";
 import { SymbolView } from "../../components/AppSymbol";

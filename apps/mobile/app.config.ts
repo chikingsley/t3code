@@ -10,6 +10,8 @@ Object.assign(process.env, repoEnv);
 
 const APP_VARIANT = resolveAppVariant(repoEnv.APP_VARIANT);
 const isIosPersonalTeamBuild = repoEnv.T3CODE_IOS_PERSONAL_TEAM === "1";
+const isMobileWebPreview = repoEnv.T3CODE_MOBILE_WEB_PREVIEW === "1";
+const isMobileWebAuthEnabled = repoEnv.T3CODE_MOBILE_WEB_AUTH === "1";
 
 const personalTeamBundleIdentifier = repoEnv.T3CODE_IOS_PERSONAL_TEAM_BUNDLE_ID?.trim();
 const IOS_BUNDLE_IDENTIFIER_PATTERN = /^[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+$/;
@@ -63,24 +65,24 @@ const VARIANT_CONFIG = {
   development: {
     appName: "T3 Code Dev",
     scheme: "t3code-dev",
-    iosBundleIdentifier: "com.t3tools.t3code.dev",
-    androidPackage: "com.t3tools.t3code.dev",
+    iosBundleIdentifier: "studio.peacockery.t3code.dev",
+    androidPackage: "studio.peacockery.t3code.dev",
     relyingParty: "clerk.t3.codes",
     assets: DEVELOPMENT_ASSETS,
   },
   preview: {
     appName: "T3 Code Preview",
     scheme: "t3code-preview",
-    iosBundleIdentifier: "com.t3tools.t3code.preview",
-    androidPackage: "com.t3tools.t3code.preview",
+    iosBundleIdentifier: "studio.peacockery.t3code.preview",
+    androidPackage: "studio.peacockery.t3code.preview",
     relyingParty: "clerk.t3.codes",
     assets: PREVIEW_ASSETS,
   },
   production: {
-    appName: "T3 Code",
+    appName: "T3 Code-Voice",
     scheme: "t3code",
-    iosBundleIdentifier: "com.t3tools.t3code",
-    androidPackage: "com.t3tools.t3code",
+    iosBundleIdentifier: "studio.peacockery.t3code",
+    androidPackage: "studio.peacockery.t3code",
     relyingParty: "clerk.t3.codes",
     assets: RELEASE_ASSETS,
   },
@@ -159,7 +161,7 @@ const sharingPlugin: NonNullable<ExpoConfig["plugins"]>[number] = [
 const config: ExpoConfig = {
   name: variant.appName,
   slug: "t3-code",
-  platforms: ["ios", "android"],
+  platforms: ["ios", "android", "web"],
   scheme: variant.scheme,
   version: "1.0.1",
   runtimeVersion: {
@@ -185,10 +187,9 @@ const config: ExpoConfig = {
     // showcase capture build requires full screen (see infoPlist below).
     requireFullScreen: process.env.T3_SHOWCASE_CAPTURE_BUILD === "1",
     bundleIdentifier: iosBundleIdentifier,
-    // Pin code signing to the T3 Tools team so non-interactive `expo run:ios`
-    // does not fall back to a personal team (which cannot sign app groups,
-    // Sign in with Apple, or push notification entitlements).
-    appleTeamId: "ARK85ZXQ4Z",
+    // Pin code signing to the personal Peacockery team used by this fork so
+    // EAS and local release builds select the matching registered identifiers.
+    appleTeamId: "XM69J99HWP",
     associatedDomains: [
       `applinks:${variant.relyingParty}`,
       `webcredentials:${variant.relyingParty}`,
@@ -300,6 +301,15 @@ const config: ExpoConfig = {
     ],
     ["expo-image-picker", { photosPermission: false, microphonePermission: false }],
     [
+      "expo-audio",
+      {
+        microphonePermission: "Allow T3 Code to record voice input for dictation.",
+        recordAudioAndroid: true,
+        enableBackgroundRecording: false,
+        enableBackgroundPlayback: false,
+      },
+    ],
+    [
       "expo-splash-screen",
       {
         image: variant.assets.splashIcon,
@@ -347,8 +357,14 @@ const config: ExpoConfig = {
       url: repoEnv.T3CODE_RELAY_URL ?? null,
     },
     clerk: {
-      publishableKey: repoEnv.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY ?? null,
-      jwtTemplate: repoEnv.EXPO_PUBLIC_CLERK_JWT_TEMPLATE ?? null,
+      publishableKey:
+        isMobileWebPreview && !isMobileWebAuthEnabled
+          ? null
+          : (repoEnv.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY ?? null),
+      jwtTemplate:
+        isMobileWebPreview && !isMobileWebAuthEnabled
+          ? null
+          : (repoEnv.EXPO_PUBLIC_CLERK_JWT_TEMPLATE ?? null),
     },
     // Native Google sign-in credentials. @clerk/expo reads these from `extra`
     // under their exact env-var names (not nested), and its config plugin reads
@@ -365,10 +381,10 @@ const config: ExpoConfig = {
       tracesToken: repoEnv.EXPO_PUBLIC_OTLP_TRACES_TOKEN ?? null,
     },
     eas: {
-      projectId: "d763fcb8-d37c-41ea-a773-b54a0ab4a454",
+      projectId: repoEnv.EXPO_PUBLIC_EAS_PROJECT_ID ?? "667ec179-14dc-4398-bd9d-7673bc0d6fea",
     },
   },
-  owner: "pingdotgg",
+  owner: "simonpeacocks",
 };
 
 export default config;

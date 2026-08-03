@@ -241,12 +241,15 @@ const makeAvailable = Effect.gen(function* () {
 
   yield* Effect.tryPromise({
     try: async () => {
-      await database.execAsync("PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;");
+      await database.execAsync(
+        process.env.EXPO_OS === "web"
+          ? "PRAGMA foreign_keys = ON;"
+          : "PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;",
+      );
       const schema = await database.getFirstAsync<{ readonly user_version: number }>(
         "PRAGMA user_version",
       );
-      await database.withExclusiveTransactionAsync(async (transaction) => {
-        await transaction.execAsync(`
+      const schemaSql = `
               CREATE TABLE IF NOT EXISTS client_cache (
                 environment_id TEXT NOT NULL,
                 kind TEXT NOT NULL,
@@ -265,10 +268,16 @@ const makeAvailable = Effect.gen(function* () {
                 payload TEXT NOT NULL,
                 updated_at INTEGER NOT NULL
               );
-            `);
-      });
+            `;
+      if (process.env.EXPO_OS === "web") {
+        await database.execAsync(schemaSql);
+      } else {
+        await database.withExclusiveTransactionAsync((transaction) =>
+          transaction.execAsync(schemaSql),
+        );
+      }
       if ((schema?.user_version ?? 0) < DATABASE_SCHEMA_VERSION) {
-        const migrated = await migrateLegacyFileCaches(database);
+        const migrated = process.env.EXPO_OS === "web" || (await migrateLegacyFileCaches(database));
         if (migrated) {
           await database.execAsync(`PRAGMA user_version = ${DATABASE_SCHEMA_VERSION};`);
         }

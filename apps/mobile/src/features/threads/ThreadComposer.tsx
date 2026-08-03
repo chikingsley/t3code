@@ -25,7 +25,7 @@ import {
   View,
   type ViewStyle,
 } from "react-native";
-import ImageViewing from "react-native-image-viewing";
+import ImageViewing from "../../components/ImageViewing";
 import Animated, {
   FadeIn,
   FadeInDown,
@@ -52,6 +52,7 @@ import {
 } from "../../components/ComposerToolbarTrigger";
 import { ControlPill, ControlPillMenu } from "../../components/ControlPill";
 import { ProviderIcon } from "../../components/ProviderIcon";
+import { DictationButton } from "../voice/DictationButton";
 import type { DraftComposerImageAttachment } from "../../lib/composerImages";
 import { buildModelMenuActions, buildModelOptions, groupByProvider } from "../../lib/modelOptions";
 import { useScaledTextRole } from "../settings/appearance/useScaledTextRole";
@@ -68,6 +69,7 @@ import {
   resolveProviderOptionDescriptors,
 } from "../../lib/providerOptions";
 import { useComposerPathSearch } from "../../state/use-composer-path-search";
+import { appendComposerDraftText } from "../../state/use-composer-drafts";
 import { ComposerCommandPopover, type ComposerCommandItem } from "./ComposerCommandPopover";
 
 /**
@@ -538,6 +540,15 @@ export const ThreadComposer = memo(function ThreadComposer(props: ThreadComposer
     props.selectedThread.id,
     props.selectedThread.title,
   ]);
+  const handleCommitDictation = useCallback(
+    (text: string) => {
+      const threadKey = scopedThreadKey(props.environmentId, props.selectedThread.id);
+      const existing = draftMessage;
+      const separator = existing.length > 0 && !existing.endsWith("\n") ? "\n\n" : "";
+      appendComposerDraftText(threadKey, `${separator}${text}`);
+    },
+    [draftMessage, props.environmentId, props.selectedThread.id],
+  );
   const handleCommandSelect = useCallback(
     (item: ComposerCommandItem) => {
       if (!composerTrigger) return;
@@ -820,18 +831,21 @@ export const ThreadComposer = memo(function ThreadComposer(props: ThreadComposer
             </View>
           ) : null}
           {!isExpanded ? (
-            <Animated.View entering={FadeIn.duration(180)} exiting={FadeOut.duration(100)}>
-              {showStopAction ? (
-                <ControlPill icon="stop.fill" variant="danger" onPress={props.onStopThread} />
-              ) : (
-                <ControlPill
-                  icon="arrow.up"
-                  variant="primary"
-                  disabled={!canSend}
-                  onPress={handleSend}
-                />
-              )}
-            </Animated.View>
+            <>
+              <DictationButton variant="pill" onCommit={handleCommitDictation} />
+              <Animated.View entering={FadeIn.duration(180)} exiting={FadeOut.duration(100)}>
+                {showStopAction ? (
+                  <ControlPill icon="stop.fill" variant="danger" onPress={props.onStopThread} />
+                ) : (
+                  <ControlPill
+                    icon="arrow.up"
+                    variant="primary"
+                    disabled={!canSend}
+                    onPress={handleSend}
+                  />
+                )}
+              </Animated.View>
+            </>
           ) : null}
         </ComposerSurface>
 
@@ -881,6 +895,7 @@ export const ThreadComposer = memo(function ThreadComposer(props: ThreadComposer
                   />
                 ) : null}
               </ComposerToolbarScroller>
+              <DictationButton variant="toolbar" onCommit={handleCommitDictation} />
               <ComposerToolbarButton
                 accessibilityLabel={sendLabel}
                 icon="arrow.up"
