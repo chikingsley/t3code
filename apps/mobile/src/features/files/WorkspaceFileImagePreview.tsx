@@ -1,7 +1,7 @@
 import { useAtomValue } from "@effect/atom-react";
 import { useMemo, useState } from "react";
 import { ActivityIndicator, Image, Pressable, View } from "react-native";
-import ImageViewing from "react-native-image-viewing";
+import ImageViewing from "../../components/ImageViewing";
 import { AsyncResult } from "effect/unstable/reactivity";
 
 import { AppText as Text } from "../../components/AppText";

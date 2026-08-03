@@ -26,6 +26,7 @@ const resolveShikiDependencyRoot = (packageName) => {
 config.watchFolders = [...new Set([...(config.watchFolders ?? []), workspaceRoot])];
 config.resolver = {
   ...config.resolver,
+  assetExts: [...new Set([...(config.resolver?.assetExts ?? []), "wasm"])],
   blockList: [
     ...(Array.isArray(config.resolver?.blockList)
       ? config.resolver.blockList
@@ -46,6 +47,16 @@ config.resolver = {
     "@shikijs/types": resolveShikiDependencyRoot("@shikijs/types"),
     "@shikijs/vscode-textmate": resolveShikiDependencyRoot("@shikijs/vscode-textmate"),
   },
+};
+
+const { enhanceMiddleware } = config.server;
+config.server.enhanceMiddleware = (middleware, server) => {
+  const enhanced = enhanceMiddleware ? enhanceMiddleware(middleware, server) : middleware;
+  return (request, response, next) => {
+    response.setHeader("Cross-Origin-Embedder-Policy", "credentialless");
+    response.setHeader("Cross-Origin-Opener-Policy", "same-origin");
+    return enhanced(request, response, next);
+  };
 };
 
 module.exports = withUniwindConfig(config, {

@@ -31,19 +31,28 @@ export class MobileSecureStorage extends Context.Service<
 export const make = MobileSecureStorage.of({
   getItem: Effect.fn("MobileSecureStorage.getItem")((key) =>
     Effect.tryPromise({
-      try: () => SecureStore.getItemAsync(key),
+      try: async () =>
+        process.env.EXPO_OS === "web"
+          ? globalThis.localStorage.getItem(key)
+          : SecureStore.getItemAsync(key),
       catch: (cause) => new MobileSecureStorageError({ operation: "read", key, cause }),
     }),
   ),
   setItem: Effect.fn("MobileSecureStorage.setItem")((key, value) =>
     Effect.tryPromise({
-      try: () => SecureStore.setItemAsync(key, value),
+      try: async () => {
+        if (process.env.EXPO_OS === "web") globalThis.localStorage.setItem(key, value);
+        else await SecureStore.setItemAsync(key, value);
+      },
       catch: (cause) => new MobileSecureStorageError({ operation: "write", key, cause }),
     }),
   ),
   removeItem: Effect.fn("MobileSecureStorage.removeItem")((key) =>
     Effect.tryPromise({
-      try: () => SecureStore.deleteItemAsync(key),
+      try: async () => {
+        if (process.env.EXPO_OS === "web") globalThis.localStorage.removeItem(key);
+        else await SecureStore.deleteItemAsync(key);
+      },
       catch: (cause) => new MobileSecureStorageError({ operation: "delete", key, cause }),
     }),
   ),

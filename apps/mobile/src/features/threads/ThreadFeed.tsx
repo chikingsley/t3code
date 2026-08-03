@@ -24,7 +24,7 @@ import {
   type CustomRenderers,
   type NodeStyleOverrides,
   type PartialMarkdownTheme,
-} from "react-native-nitro-markdown";
+} from "../../components/MarkdownRenderer";
 import {
   ActivityIndicator,
   Image,
@@ -43,7 +43,7 @@ import {
   View,
 } from "react-native";
 import { TouchableOpacity } from "react-native-gesture-handler";
-import ImageViewing from "react-native-image-viewing";
+import ImageViewing from "../../components/ImageViewing";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Animated, {
   FadeIn,
