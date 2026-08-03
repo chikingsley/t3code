@@ -797,15 +797,24 @@ const make = Effect.gen(function* () {
             Effect.map((uuid) => CommandId.make(`provider-history:${binding.threadId}:${uuid}`)),
           );
           const createdAt = yield* nowIso;
-          yield* orchestrationEngine.dispatch({
-            type: "thread.history.reconcile",
-            commandId,
-            threadId: binding.threadId,
-            provider: binding.provider,
-            messages,
-            activities,
-            createdAt,
-          });
+          yield* orchestrationEngine
+            .dispatch({
+              type: "thread.history.reconcile",
+              commandId,
+              threadId: binding.threadId,
+              provider: binding.provider,
+              messages,
+              activities,
+              createdAt,
+            })
+            .pipe(
+              Effect.catchTag("OrchestrationCommandInvariantError", (error) =>
+                error.commandType === "thread.history.reconcile" &&
+                error.detail === "Command produced no events."
+                  ? Effect.void
+                  : Effect.fail(error),
+              ),
+            );
         }).pipe(
           Effect.catchCause((cause) =>
             Cache.set(historyFailureBackoff, binding.threadId, true).pipe(
