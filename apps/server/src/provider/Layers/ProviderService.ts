@@ -973,6 +973,59 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
   const getInstanceInfo: ProviderServiceMethod<"getInstanceInfo"> = (instanceId) =>
     registry.getInstanceInfo(instanceId);
 
+  const readHistory: ProviderServiceMethod<"readHistory"> = Effect.fn("readHistory")(
+    function* (threadId) {
+      const bindingOption = yield* directory.getBinding(threadId);
+      const binding = Option.getOrUndefined(bindingOption);
+      if (!binding) {
+        return yield* toValidationError(
+          "ProviderService.readHistory",
+          `Cannot route thread '${threadId}' because no persisted provider binding exists.`,
+        );
+      }
+      const instanceId = yield* requireBindingInstanceId("ProviderService.readHistory", binding);
+      const adapter = yield* registry.getByInstance(instanceId);
+      if (adapter.capabilities.historySync !== "canonical" || !adapter.readHistory) {
+        return undefined;
+      }
+      const hasActiveSession = yield* adapter.hasSession(threadId);
+      if (!hasActiveSession && adapter.readHistoryFromResume) {
+        if (binding.resumeCursor === null || binding.resumeCursor === undefined) {
+          return undefined;
+        }
+        const persistedCwd = readPersistedCwd(binding.runtimePayload);
+        const persistedModelSelection = readPersistedModelSelection(binding.runtimePayload);
+        return yield* adapter.readHistoryFromResume({
+          threadId,
+          provider: binding.provider,
+          providerInstanceId: instanceId,
+          ...(persistedCwd ? { cwd: persistedCwd } : {}),
+          ...(persistedModelSelection ? { modelSelection: persistedModelSelection } : {}),
+          resumeCursor: binding.resumeCursor,
+          runtimeMode: binding.runtimeMode ?? "full-access",
+        });
+      }
+      const routed = yield* resolveRoutableSession({
+        threadId,
+        operation: "ProviderService.readHistory",
+        allowRecovery: true,
+      });
+      return yield* adapter.readHistory(routed.threadId);
+    },
+  );
+
+  const listHistoryBindings: NonNullable<
+    ProviderService.ProviderServiceShape["listHistoryBindings"]
+  > = () =>
+    directory.listBindings().pipe(
+      Effect.map((bindings) =>
+        bindings.map((binding) => ({
+          threadId: binding.threadId,
+          provider: binding.provider,
+        })),
+      ),
+    );
+
   const rollbackConversation: ProviderServiceMethod<"rollbackConversation"> = Effect.fn(
     "rollbackConversation",
   )(function* (rawInput) {
@@ -1084,6 +1137,8 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
     listSessions,
     getCapabilities,
     getInstanceInfo,
+    readHistory,
+    listHistoryBindings,
     rollbackConversation,
     // Each access creates a fresh PubSub subscription so that multiple
     // consumers (ProviderRuntimeIngestion, CheckpointReactor, etc.) each

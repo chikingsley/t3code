@@ -7,6 +7,7 @@ import {
 import * as DateTime from "effect/DateTime";
 import * as Crypto from "effect/Crypto";
 import * as Effect from "effect/Effect";
+import * as Equal from "effect/Equal";
 import type * as PlatformError from "effect/PlatformError";
 
 import { OrchestrationCommandInvariantError } from "./Errors.ts";
@@ -1204,6 +1205,94 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
         },
       };
       return [unsettledEvent, activityAppendedEvent];
+    }
+
+    case "thread.history.reconcile": {
+      const thread = yield* requireThread({
+        readModel,
+        command,
+        threadId: command.threadId,
+      });
+      const events: PlannedOrchestrationEvent[] = [];
+      const messagesById = new Map(thread.messages.map((message) => [message.id, message]));
+      let messageMatchCursor = 0;
+      for (const message of command.messages) {
+        const existing = messagesById.get(message.id);
+        if (
+          existing &&
+          existing.role === message.role &&
+          existing.text === message.text &&
+          existing.turnId === message.turnId &&
+          existing.streaming === false
+        ) {
+          continue;
+        }
+        if (!existing) {
+          const matchingIndex = thread.messages.findIndex(
+            (candidate, index) =>
+              index >= messageMatchCursor &&
+              candidate.role === message.role &&
+              candidate.text === message.text,
+          );
+          if (matchingIndex >= 0) {
+            messageMatchCursor = matchingIndex + 1;
+            continue;
+          }
+        }
+        events.push({
+          ...(yield* withEventBase({
+            aggregateKind: "thread",
+            aggregateId: command.threadId,
+            occurredAt: message.updatedAt,
+            commandId: command.commandId,
+            metadata: { adapterKey: command.provider },
+          })),
+          type: "thread.message-sent",
+          payload: {
+            threadId: command.threadId,
+            messageId: message.id,
+            role: message.role,
+            text: message.text,
+            ...(message.attachments !== undefined ? { attachments: message.attachments } : {}),
+            turnId: message.turnId,
+            streaming: false,
+            createdAt: message.createdAt,
+            updatedAt: message.updatedAt,
+          },
+        });
+      }
+      const activitiesById = new Map(thread.activities.map((activity) => [activity.id, activity]));
+      let activityMatchCursor = 0;
+      for (const activity of command.activities) {
+        const existing = activitiesById.get(activity.id);
+        if (existing && Equal.equals(existing, activity)) {
+          continue;
+        }
+        if (!existing) {
+          const matchingIndex = thread.activities.findIndex(
+            (candidate, index) =>
+              index >= activityMatchCursor &&
+              candidate.kind === activity.kind &&
+              candidate.summary === activity.summary,
+          );
+          if (matchingIndex >= 0) {
+            activityMatchCursor = matchingIndex + 1;
+            continue;
+          }
+        }
+        events.push({
+          ...(yield* withEventBase({
+            aggregateKind: "thread",
+            aggregateId: command.threadId,
+            occurredAt: activity.createdAt,
+            commandId: command.commandId,
+            metadata: { adapterKey: command.provider },
+          })),
+          type: "thread.activity-appended",
+          payload: { threadId: command.threadId, activity },
+        });
+      }
+      return events;
     }
 
     default: {

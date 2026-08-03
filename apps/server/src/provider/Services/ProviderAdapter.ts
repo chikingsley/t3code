@@ -30,6 +30,36 @@ export interface ProviderAdapterCapabilities {
    * Declares whether changing the model on an existing session is supported.
    */
   readonly sessionModelSwitch: ProviderSessionModelSwitchMode;
+  /**
+   * Canonical history can be reread after another client advances the same
+   * provider session. Attached history only describes events observed by this
+   * adapter process.
+   */
+  readonly historySync?: "canonical" | "attached";
+}
+
+export interface ProviderHistoryMessage {
+  readonly id: string;
+  readonly role: "user" | "assistant";
+  readonly text: string;
+  readonly createdAt: string;
+  readonly turnId?: TurnId;
+}
+
+export interface ProviderHistoryActivity {
+  readonly id: string;
+  readonly kind: string;
+  readonly tone: "info" | "tool" | "error";
+  readonly summary: string;
+  readonly payload: unknown;
+  readonly createdAt: string;
+  readonly turnId?: TurnId;
+  readonly sequence?: number;
+}
+
+export interface ProviderThreadHistory {
+  readonly messages: ReadonlyArray<ProviderHistoryMessage>;
+  readonly activities: ReadonlyArray<ProviderHistoryActivity>;
 }
 
 export interface ProviderThreadTurnSnapshot {
@@ -105,6 +135,14 @@ export interface ProviderAdapterShape<TError> {
    * Read a provider thread snapshot.
    */
   readonly readThread: (threadId: ThreadId) => Effect.Effect<ProviderThreadSnapshot, TError>;
+
+  /** Read provider-authoritative history for outside-session reconciliation. */
+  readonly readHistory?: (threadId: ThreadId) => Effect.Effect<ProviderThreadHistory, TError>;
+
+  /** Read canonical history from durable resume state without adopting it. */
+  readonly readHistoryFromResume?: (
+    input: ProviderSessionStartInput,
+  ) => Effect.Effect<ProviderThreadHistory, TError>;
 
   /**
    * Roll back a provider thread by N turns.

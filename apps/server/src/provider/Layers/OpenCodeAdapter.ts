@@ -38,6 +38,11 @@ import {
   ProviderAdapterValidationError,
 } from "../Errors.ts";
 import { type OpenCodeAdapterShape } from "../Services/OpenCodeAdapter.ts";
+import type {
+  ProviderHistoryActivity,
+  ProviderHistoryMessage,
+  ProviderThreadHistory,
+} from "../Services/ProviderAdapter.ts";
 import {
   buildOpenCodePermissionRules,
   OpenCodeRuntime,
@@ -166,6 +171,105 @@ export function isSameOpenCodeDirectory(
 interface OpenCodeTurnSnapshot {
   readonly id: TurnId;
   readonly items: Array<unknown>;
+}
+
+function openCodeTime(value: unknown, fallback = "1970-01-01T00:00:00.000Z"): string {
+  return typeof value === "number" && Number.isFinite(value)
+    ? (isoFromEpochMs(value) ?? fallback)
+    : fallback;
+}
+
+export function normalizeOpenCodeThreadHistory(
+  entries: ReadonlyArray<{ readonly info: unknown; readonly parts: ReadonlyArray<unknown> }>,
+): ProviderThreadHistory {
+  const messages: ProviderHistoryMessage[] = [];
+  const activities: ProviderHistoryActivity[] = [];
+  let activeTurnId: TurnId | undefined;
+  let sequence = 0;
+  for (const entry of entries) {
+    if (typeof entry.info !== "object" || entry.info === null) continue;
+    const info = entry.info as Record<string, unknown>;
+    const role = info.role;
+    const messageId = typeof info.id === "string" ? info.id : `message:${sequence}`;
+    const infoTime =
+      typeof info.time === "object" && info.time !== null
+        ? (info.time as Record<string, unknown>)
+        : {};
+    const messageCreatedAt = openCodeTime(infoTime.created);
+    if (role === "user") activeTurnId = TurnId.make(messageId);
+    for (const rawPart of entry.parts) {
+      if (typeof rawPart !== "object" || rawPart === null) continue;
+      const part = rawPart as Record<string, unknown>;
+      const partId = typeof part.id === "string" ? part.id : `${messageId}:${sequence}`;
+      const id = `provider-history:opencode:${partId}`;
+      sequence += 1;
+      const partTime =
+        typeof part.time === "object" && part.time !== null
+          ? (part.time as Record<string, unknown>)
+          : {};
+      const createdAt = openCodeTime(partTime.start, messageCreatedAt);
+      const completedAt = openCodeTime(partTime.end, createdAt);
+      if (part.type === "text" && typeof part.text === "string" && part.text.trim().length > 0) {
+        messages.push({
+          id,
+          role: role === "user" ? "user" : "assistant",
+          text: part.text.trim(),
+          createdAt: role === "user" ? createdAt : completedAt,
+          ...(role === "assistant" && activeTurnId ? { turnId: activeTurnId } : {}),
+        });
+        continue;
+      }
+      if (role !== "assistant") continue;
+      if (
+        part.type === "reasoning" &&
+        typeof part.text === "string" &&
+        part.text.trim().length > 0
+      ) {
+        const detail = part.text.trim();
+        activities.push({
+          id,
+          kind: "task.progress",
+          tone: "info",
+          summary: detail.split("\n").at(-1)?.slice(0, 120) ?? "Reasoning update",
+          payload: {
+            taskId: partId,
+            detail,
+            summary: detail,
+            sourceType: "opencode.session.messages",
+          },
+          createdAt,
+          ...(activeTurnId ? { turnId: activeTurnId } : {}),
+          sequence,
+        });
+        continue;
+      }
+      if (part.type === "tool") {
+        const state =
+          typeof part.state === "object" && part.state !== null
+            ? (part.state as Record<string, unknown>)
+            : {};
+        const toolName = typeof part.tool === "string" ? part.tool : "Tool";
+        activities.push({
+          id,
+          kind: "tool.completed",
+          tone: state.status === "error" ? "error" : "tool",
+          summary: toolName,
+          payload: {
+            itemType: "dynamic_tool_call",
+            status: state.status ?? "completed",
+            data: rawPart,
+          },
+          createdAt: completedAt,
+          ...(activeTurnId ? { turnId: activeTurnId } : {}),
+          sequence,
+        });
+      }
+    }
+  }
+  return {
+    messages,
+    activities,
+  };
 }
 
 type OpenCodeSubscribedEvent =
@@ -1657,6 +1761,48 @@ export function makeOpenCodeAdapter(
       },
     );
 
+    const readHistory = Effect.fn("readHistory")(function* (threadId: ThreadId) {
+      const context = yield* ensureSessionContext(sessions, threadId);
+      const messages = yield* runOpenCodeSdk("session.messages", () =>
+        context.client.session.messages({ sessionID: context.openCodeSessionId }),
+      ).pipe(Effect.mapError(toRequestError));
+      return normalizeOpenCodeThreadHistory(messages.data ?? []);
+    });
+
+    const readHistoryFromResume: NonNullable<OpenCodeAdapterShape["readHistoryFromResume"]> =
+      Effect.fn("readHistoryFromResume")(function* (input) {
+        const sessionId = parseOpenCodeResume(input.resumeCursor)?.sessionId;
+        if (!sessionId) {
+          return yield* new ProviderAdapterValidationError({
+            provider: PROVIDER,
+            operation: "readHistoryFromResume",
+            issue: "A valid OpenCode resume cursor is required.",
+          });
+        }
+        return yield* Effect.scoped(
+          Effect.gen(function* () {
+            const server = yield* openCodeRuntime
+              .connectToOpenCodeServer({
+                binaryPath: openCodeSettings.binaryPath,
+                serverUrl: openCodeSettings.serverUrl,
+                ...(options?.environment ? { environment: options.environment } : {}),
+              })
+              .pipe(Effect.mapError((cause) => toProcessError(input.threadId, cause)));
+            const client = openCodeRuntime.createOpenCodeSdkClient({
+              baseUrl: server.url,
+              directory: input.cwd ?? serverConfig.cwd,
+              ...(server.external && openCodeSettings.serverPassword
+                ? { serverPassword: openCodeSettings.serverPassword }
+                : {}),
+            });
+            const messages = yield* runOpenCodeSdk("session.messages", () =>
+              client.session.messages({ sessionID: sessionId }),
+            ).pipe(Effect.mapError(toRequestError));
+            return normalizeOpenCodeThreadHistory(messages.data ?? []);
+          }),
+        );
+      });
+
     const rollbackThread: OpenCodeAdapterShape["rollbackThread"] = Effect.fn("rollbackThread")(
       function* (threadId, numTurns) {
         const context = yield* ensureSessionContext(sessions, threadId);
@@ -1701,6 +1847,7 @@ export function makeOpenCodeAdapter(
       provider: PROVIDER,
       capabilities: {
         sessionModelSwitch: "in-session",
+        historySync: "canonical",
       },
       startSession,
       sendTurn,
@@ -1711,6 +1858,8 @@ export function makeOpenCodeAdapter(
       listSessions,
       hasSession,
       readThread,
+      readHistory,
+      readHistoryFromResume,
       rollbackThread,
       stopAll,
       get streamEvents() {

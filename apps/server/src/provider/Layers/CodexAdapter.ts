@@ -22,14 +22,17 @@ import {
   RuntimeRequestId,
   ProviderApprovalDecision,
   ThreadId,
+  TurnId,
   ProviderSendTurnInput,
 } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
+import * as DateTime from "effect/DateTime";
 import * as Crypto from "effect/Crypto";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
 import * as FileSystem from "effect/FileSystem";
 import * as Queue from "effect/Queue";
+import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
@@ -50,6 +53,11 @@ import {
   type ProviderAdapterError,
 } from "../Errors.ts";
 import { type CodexAdapterShape } from "../Services/CodexAdapter.ts";
+import type {
+  ProviderHistoryActivity,
+  ProviderHistoryMessage,
+  ProviderThreadHistory,
+} from "../Services/ProviderAdapter.ts";
 import { resolveAttachmentPath } from "../../attachmentStore.ts";
 import { ServerConfig } from "../../config.ts";
 import {
@@ -91,6 +99,112 @@ interface CodexAdapterSessionContext {
   readonly runtime: CodexSessionRuntimeShape;
   readonly eventFiber: Fiber.Fiber<void, never>;
   stopped: boolean;
+}
+
+function isoFromCodexSeconds(value: unknown, fallback: string): string {
+  return typeof value === "number" && Number.isFinite(value)
+    ? DateTime.make(value * 1_000).pipe(
+        Option.map(DateTime.formatIso),
+        Option.getOrElse(() => fallback),
+      )
+    : fallback;
+}
+
+function codexUserMessageText(item: Record<string, unknown>): string {
+  if (!Array.isArray(item.content)) return "";
+  return item.content
+    .map((entry) =>
+      typeof entry === "object" &&
+      entry !== null &&
+      typeof (entry as { text?: unknown }).text === "string"
+        ? (entry as { text: string }).text
+        : "",
+    )
+    .filter((text) => text.trim().length > 0)
+    .join("\n\n");
+}
+
+export function normalizeCodexThreadHistory(snapshot: {
+  readonly turns: ReadonlyArray<{
+    readonly id: string;
+    readonly items: ReadonlyArray<unknown>;
+    readonly startedAt?: number | null;
+    readonly completedAt?: number | null;
+  }>;
+}): ProviderThreadHistory {
+  const messages: ProviderHistoryMessage[] = [];
+  const activities: ProviderHistoryActivity[] = [];
+  let sequence = 0;
+  for (const turn of snapshot.turns) {
+    const turnId = TurnId.make(turn.id);
+    const turnStartedAt = isoFromCodexSeconds(turn.startedAt, "1970-01-01T00:00:00.000Z");
+    const turnCompletedAt = isoFromCodexSeconds(turn.completedAt, turnStartedAt);
+    for (const rawItem of turn.items) {
+      if (typeof rawItem !== "object" || rawItem === null) continue;
+      const item = rawItem as Record<string, unknown>;
+      const nativeId = typeof item.id === "string" ? item.id : `${turn.id}:${sequence}`;
+      const id = `provider-history:codex:${nativeId}`;
+      sequence += 1;
+      if (item.type === "userMessage") {
+        const text = codexUserMessageText(item).trim();
+        if (text.length > 0) messages.push({ id, role: "user", text, createdAt: turnStartedAt });
+        continue;
+      }
+      if (item.type === "agentMessage" && typeof item.text === "string") {
+        const text = item.text.trim();
+        if (text.length > 0) {
+          messages.push({ id, role: "assistant", text, createdAt: turnCompletedAt, turnId });
+        }
+        continue;
+      }
+      const itemType = toCanonicalItemType(typeof item.type === "string" ? item.type : undefined);
+      if (itemType === "reasoning") {
+        const detail = [
+          ...(Array.isArray(item.summary) ? item.summary : []),
+          ...(Array.isArray(item.content) ? item.content : []),
+        ]
+          .filter((part): part is string => typeof part === "string" && part.trim().length > 0)
+          .join("\n\n");
+        if (detail.length > 0) {
+          activities.push({
+            id,
+            kind: "task.progress",
+            tone: "info",
+            summary: detail.split("\n").at(-1)?.slice(0, 120) ?? "Reasoning update",
+            payload: { taskId: nativeId, detail, summary: detail, sourceType: "codex.thread.read" },
+            createdAt: turnStartedAt,
+            turnId,
+            sequence,
+          });
+        }
+        continue;
+      }
+      if (itemType === "unknown" || itemType === "user_message" || itemType === "assistant_message")
+        continue;
+      const lifecycleItem = rawItem as CodexLifecycleItem;
+      activities.push({
+        id,
+        kind: "tool.completed",
+        tone: itemType === "error" ? "error" : "tool",
+        summary: itemTitle(itemType, lifecycleItem) ?? "Tool",
+        payload: {
+          itemType,
+          status: typeof item.status === "string" ? item.status : "completed",
+          ...(itemDetail(itemType, lifecycleItem)
+            ? { detail: itemDetail(itemType, lifecycleItem) }
+            : {}),
+          data: rawItem,
+        },
+        createdAt: turnCompletedAt,
+        turnId,
+        sequence,
+      });
+    }
+  }
+  return {
+    messages,
+    activities,
+  };
 }
 
 function mapCodexRuntimeError(
@@ -1597,6 +1711,17 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
       })),
     );
 
+  const readHistory = (threadId: ThreadId) =>
+    requireSession(threadId).pipe(
+      Effect.flatMap((session) => session.runtime.readThread),
+      Effect.map(normalizeCodexThreadHistory),
+      Effect.mapError((cause) =>
+        cause._tag === "ProviderAdapterSessionNotFoundError"
+          ? cause
+          : mapCodexRuntimeError(threadId, "thread/read", cause),
+      ),
+    );
+
   const rollbackThread: CodexAdapterShape["rollbackThread"] = (threadId, numTurns) => {
     if (!Number.isInteger(numTurns) || numTurns < 1) {
       return Effect.fail(
@@ -1703,11 +1828,13 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
     provider: PROVIDER,
     capabilities: {
       sessionModelSwitch: "in-session",
+      historySync: "canonical",
     },
     startSession,
     sendTurn,
     interruptTurn,
     readThread,
+    readHistory,
     rollbackThread,
     respondToRequest,
     respondToUserInput,
