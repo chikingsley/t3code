@@ -2,6 +2,7 @@ import {
   ApprovalRequestId,
   type AssistantDeliveryMode,
   CommandId,
+  EventId,
   MessageId,
   type OrchestrationEvent,
   type OrchestrationMessage,
@@ -21,9 +22,11 @@ import * as Cache from "effect/Cache";
 import * as Cause from "effect/Cause";
 import * as Crypto from "effect/Crypto";
 import * as Duration from "effect/Duration";
+import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { makeDrainableWorker } from "@t3tools/shared/DrainableWorker";
 
@@ -42,6 +45,7 @@ import { ServerSettingsService } from "../../serverSettings.ts";
 
 const providerTurnKey = (threadId: ThreadId, turnId: TurnId) => `${threadId}:${turnId}`;
 const providerTaskKey = (threadId: ThreadId, taskId: string) => `${threadId}:${taskId}`;
+const nowIso = Effect.map(DateTime.now, DateTime.formatIso);
 
 // Fallback when the in-memory description cache no longer has the task name
 // (server restart, session-exit sweep, TTL/capacity eviction): earlier
@@ -698,6 +702,126 @@ const make = Effect.gen(function* () {
     crypto.randomUUIDv4.pipe(
       Effect.map((uuid) => CommandId.make(`provider:${event.eventId}:${tag}:${uuid}`)),
     );
+
+  const historyFailureBackoff = yield* Cache.make<ThreadId, true>({
+    capacity: 1_000,
+    timeToLive: Duration.minutes(10),
+    lookup: () => Effect.succeed(true as const),
+  });
+
+  const reconcileProviderHistory = Effect.fn("reconcileProviderHistory")(function* () {
+    if (!providerService.readHistory || !providerService.listHistoryBindings) return;
+    const bindings = yield* providerService.listHistoryBindings();
+    const seen = new Set<string>();
+    yield* Effect.forEach(
+      bindings,
+      (binding) =>
+        Effect.gen(function* () {
+          if (seen.has(binding.threadId)) return;
+          seen.add(binding.threadId);
+          if (Option.isSome(yield* Cache.getOption(historyFailureBackoff, binding.threadId)))
+            return;
+          const history = yield* providerService.readHistory!(binding.threadId);
+          if (!history) return;
+          yield* Cache.invalidate(historyFailureBackoff, binding.threadId);
+          const projected = yield* projectionSnapshotQuery
+            .getThreadDetailById(binding.threadId)
+            .pipe(Effect.map(Option.getOrUndefined));
+          if (!projected) return;
+          let messageCursor = 0;
+          const messages = history.messages.slice(-1_800).flatMap((message) => {
+            const stableMatch = projected.messages.find((candidate) => candidate.id === message.id);
+            if (
+              stableMatch?.role === message.role &&
+              stableMatch.text === message.text &&
+              stableMatch.turnId === (message.turnId ?? null) &&
+              stableMatch.streaming === false
+            ) {
+              return [];
+            }
+            if (!stableMatch) {
+              const matchingIndex = projected.messages.findIndex(
+                (candidate, index) =>
+                  index >= messageCursor &&
+                  candidate.role === message.role &&
+                  candidate.text === message.text,
+              );
+              if (matchingIndex >= 0) {
+                messageCursor = matchingIndex + 1;
+                return [];
+              }
+            }
+            return [
+              {
+                id: MessageId.make(message.id),
+                role: message.role,
+                text: message.text,
+                turnId: message.turnId ?? null,
+                streaming: false,
+                createdAt: message.createdAt,
+                updatedAt: message.createdAt,
+              },
+            ];
+          });
+          let activityCursor = 0;
+          const activities = history.activities.slice(-450).flatMap((activity) => {
+            const stableMatch = projected.activities.find(
+              (candidate) => candidate.id === activity.id,
+            );
+            if (stableMatch) return [];
+            const matchingIndex = projected.activities.findIndex(
+              (candidate, index) =>
+                index >= activityCursor &&
+                candidate.kind === activity.kind &&
+                candidate.summary === activity.summary,
+            );
+            if (matchingIndex >= 0) {
+              activityCursor = matchingIndex + 1;
+              return [];
+            }
+            return [
+              {
+                id: EventId.make(activity.id),
+                tone: activity.tone,
+                kind: activity.kind,
+                summary: activity.summary,
+                payload: activity.payload,
+                turnId: activity.turnId ?? null,
+                ...(activity.sequence !== undefined ? { sequence: activity.sequence } : {}),
+                createdAt: activity.createdAt,
+              },
+            ];
+          });
+          if (messages.length === 0 && activities.length === 0) return;
+          const commandId = yield* crypto.randomUUIDv4.pipe(
+            Effect.map((uuid) => CommandId.make(`provider-history:${binding.threadId}:${uuid}`)),
+          );
+          const createdAt = yield* nowIso;
+          yield* orchestrationEngine.dispatch({
+            type: "thread.history.reconcile",
+            commandId,
+            threadId: binding.threadId,
+            provider: binding.provider,
+            messages,
+            activities,
+            createdAt,
+          });
+        }).pipe(
+          Effect.catchCause((cause) =>
+            Cache.set(historyFailureBackoff, binding.threadId, true).pipe(
+              Effect.andThen(
+                Effect.logWarning("provider history reconciliation failed", {
+                  threadId: binding.threadId,
+                  provider: binding.provider,
+                  cause: Cause.pretty(cause),
+                }),
+              ),
+            ),
+          ),
+        ),
+      { concurrency: 1, discard: true },
+    );
+  });
 
   const turnMessageIdsByTurnKey = yield* Cache.make<string, Set<MessageId>>({
     capacity: TURN_MESSAGE_IDS_BY_TURN_CACHE_CAPACITY,
@@ -1817,6 +1941,12 @@ const make = Effect.gen(function* () {
           }
           return worker.enqueue({ source: "domain", event });
         }),
+      );
+      yield* forkParked(
+        reconcileProviderHistory().pipe(
+          Effect.repeat(Schedule.spaced("15 seconds")),
+          Effect.asVoid,
+        ),
       );
     });
 

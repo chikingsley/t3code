@@ -30,6 +30,7 @@ import type * as Stream from "effect/Stream";
 
 import type { ProviderServiceError } from "../Errors.ts";
 import type { ProviderAdapterCapabilities } from "./ProviderAdapter.ts";
+import type { ProviderThreadHistory } from "./ProviderAdapter.ts";
 import type { ProviderInstanceRoutingInfo } from "./ProviderAdapterRegistry.ts";
 
 /**
@@ -96,6 +97,19 @@ export interface ProviderServiceShape {
   readonly getInstanceInfo: (
     instanceId: ProviderInstanceId,
   ) => Effect.Effect<ProviderInstanceRoutingInfo, ProviderServiceError>;
+
+  /** Recover the bound session and read its provider-authoritative history. */
+  readonly readHistory?: (
+    threadId: ThreadId,
+  ) => Effect.Effect<ProviderThreadHistory | undefined, ProviderServiceError>;
+
+  readonly listHistoryBindings?: () => Effect.Effect<
+    ReadonlyArray<{
+      readonly threadId: ThreadId;
+      readonly provider: ProviderRuntimeEvent["provider"];
+    }>,
+    ProviderServiceError
+  >;
 
   /**
    * Roll back provider conversation state by a number of turns.
