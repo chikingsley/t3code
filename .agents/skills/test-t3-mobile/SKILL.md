@@ -36,7 +36,7 @@ Bundle or package presence proves the correct variant, not native compatibility.
 
 ## Handle Expo web previews for human review
 
-Treat a browser-based Expo preview as a distinct mode from a simulator or emulator test. Load and follow `peacockery-tunnels` whenever Simon needs a public preview URL.
+Treat a browser-based Expo preview as a distinct mode from a simulator or emulator test. Load and follow `peacockery-tunnels` whenever Simon needs a public preview URL. Load `expo-preview-stack` whenever that URL must survive the current response.
 
 For same-turn agent automation, an explicitly tracked foreground Metro or Expo process is sufficient. Stop its owned process and route at the end of that same-turn test.
 
@@ -45,7 +45,7 @@ For a URL Simon will open after the current response, every foreground agent ter
 - For the standard T3 mobile web preview, run `vp run --filter @t3tools/mobile web:stack:up` from the repository root.
 - Immediately run `vp run --filter @t3tools/mobile web:stack:status`. Require an active service, disabled login autostart unless Simon explicitly requested it, a healthy local origin, and a healthy public URL.
 - Report `vp run --filter @t3tools/mobile web:stack:down` as the complete teardown command. It owns both the named tunnel route and supervised Expo process.
-- For a distinct variant, entry point, port, or route such as a UI lab, create or extend a role-specific project-owned combined `up`, `down`, and `status` stack. Give it a distinct user service and tunnel name. Keep the unit disabled at login by default.
+- For a distinct variant, entry point, port, or route such as a UI lab, use the global `expo-preview-stack` helper with a role-specific profile, port, command, and tunnel name. It provides the combined `up`, `down`, and `status` lifecycle while keeping T3-specific values in the profile rather than the global skill.
 
 Current local and public HTTP 200 responses from a foreground Expo process prove present health only. They never qualify the preview for post-response handoff. Withhold a retained stable URL until the combined status and both health checks pass; remove an owned route that points at an unavailable origin.
 
