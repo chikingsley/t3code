@@ -34,6 +34,21 @@ The development identity on both platforms is:
 
 Bundle or package presence proves the correct variant, not native compatibility. Reuse it only when the current changes did not alter its Expo SDK, native dependencies, config plugins, entitlements, generated project, or native source.
 
+## Handle Expo web previews for human review
+
+Treat a browser-based Expo preview as a distinct mode from a simulator or emulator test. Load and follow `peacockery-tunnels` whenever Simon needs a public preview URL.
+
+For same-turn agent automation, an explicitly tracked foreground Metro or Expo process is sufficient. Stop its owned process and route at the end of that same-turn test.
+
+For a URL Simon will open after the current response, every foreground agent terminal, PTY, and unified exec session is turn-scoped. Use a project-owned supervised stack before handoff:
+
+- For the standard T3 mobile web preview, run `vp run --filter @t3tools/mobile web:stack:up` from the repository root.
+- Immediately run `vp run --filter @t3tools/mobile web:stack:status`. Require an active service, disabled login autostart unless Simon explicitly requested it, a healthy local origin, and a healthy public URL.
+- Report `vp run --filter @t3tools/mobile web:stack:down` as the complete teardown command. It owns both the named tunnel route and supervised Expo process.
+- For a distinct variant, entry point, port, or route such as a UI lab, create or extend a role-specific project-owned combined `up`, `down`, and `status` stack. Give it a distinct user service and tunnel name. Keep the unit disabled at login by default.
+
+Current local and public HTTP 200 responses from a foreground Expo process prove present health only. They never qualify the preview for post-response handoff. Withhold a retained stable URL until the combined status and both health checks pass; remove an owned route that points at an unavailable origin.
+
 ## Start one disposable T3 environment
 
 Run backend commands from the repository root. Use the ignored, worktree-local `.t3` directory or create a fresh directory with the host OS's temporary-directory mechanism. An explicit base directory stores state in `<base-dir>/userdata`; never point testing at shared `~/.t3` state.
@@ -73,8 +88,10 @@ Enter the complete `http://` origin to make the test transport explicit. Bare IP
 Run Metro from `apps/mobile`.
 
 1. Inspect any process on the intended Metro port and its `/status` response. Reuse it only when it is healthy, belongs to this worktree, and matches `APP_VARIANT=development`, `--dev-client`, and scheme `t3code-dev`.
-2. Never kill another worktree's Metro. Use a free explicit port when necessary.
-3. Run `vp run dev:client` on the standard port. For another port, retain the complete development identity:
+
+1. Never kill another worktree's Metro. Use a free explicit port when necessary.
+
+1. Run `vp run dev:client` on the standard port. For another port, retain the complete development identity:
 
    ```bash
    APP_VARIANT=development vp exec expo start \
@@ -87,7 +104,7 @@ Run Metro from `apps/mobile`.
 
    In PowerShell, set `$env:APP_VARIANT = "development"` first and then run the `vp exec expo start ...` command without the leading assignment.
 
-4. Open the exact development-client URL for the selected device and confirm the loaded bundle belongs to this worktree and Metro port.
+1. Open the exact development-client URL for the selected device and confirm the loaded bundle belongs to this worktree and Metro port.
 
 ### iOS launch
 
@@ -170,11 +187,11 @@ Android does not use serve-sim. Use a browser-compatible Android mirror when the
 Exercise only the affected flow on one representative device unless the change specifically concerns platform, OS version, or screen size. Before finishing:
 
 1. Confirm the app connected to the intended disposable environment instead of merely rendering an empty disconnected state.
-2. Capture the relevant final state.
-3. Remove the disposable environment from T3 Code Dev.
-4. Remove any `adb reverse` rule created for this test with `adb -s <emulator-serial> reverse --remove tcp:<metro-port>`.
-5. Stop only the serve-sim, Metro, backend, emulator, and log processes started by this test.
-6. Remove only base directories and temporary Git repositories deliberately created for this test. Preserve them when they contain useful reproduction evidence.
+1. Capture the relevant final state.
+1. Remove the disposable environment from T3 Code Dev.
+1. Remove any `adb reverse` rule created for this test with `adb -s <emulator-serial> reverse --remove tcp:<metro-port>`.
+1. Stop only the serve-sim, Metro, backend, emulator, and log processes started by this test.
+1. Remove only base directories and temporary Git repositories deliberately created for this test. Preserve them when they contain useful reproduction evidence.
 
 Keep local verification focused. Do not turn this workflow into a full repository test run.
 
