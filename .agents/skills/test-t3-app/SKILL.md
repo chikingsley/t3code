@@ -36,7 +36,7 @@ Do not open the other person's complete pairing URL during this reachability che
 
 Treat the overall testing or implementation loop—not an assistant turn or one verification pass—as the environment lifecycle boundary.
 
-An agent terminal, PTY, or unified exec session is a same-turn owner. When Simon will inspect the web app after the current response, load `peacockery-tunnels` and move the application plus route under project-owned combined `up`, `down`, and `status` commands before handoff. Immediately verify supervisor state, login or boot enablement, loopback health, and public HTTPS health. A foreground `vp run dev` process alone never qualifies as a retained preview.
+An agent terminal, PTY, or unified exec session is a same-turn owner. When Simon will inspect the web app after the current response, load `peacockery-tunnels` and move the application plus route under project-owned combined `up`, `down`, and `status` commands before handoff. For an Expo or Metro web surface, load `expo-preview-stack` and use its bundled helper. Immediately verify supervisor state, login or boot enablement, loopback health, and public HTTPS health. A foreground `vp run dev` process alone never qualifies as a retained preview.
 
 - Keep the dev process, base directory, selected ports, authenticated browser tab, registered projects, and seeded fixtures alive while the user may inspect the result or request follow-up changes.
 - Do not stop the server merely because one verification pass completed or because you are yielding a response to the user.
