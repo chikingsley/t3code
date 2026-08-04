@@ -10,11 +10,11 @@ Use this skill for the web client. For iOS Simulator, Android Emulator, or physi
 ## Start an isolated web environment
 
 1. Run commands from the repository root.
-2. Choose a base directory that belongs only to the current worktree or test:
+1. Choose a base directory that belongs only to the current worktree or test:
    - Use the repository's ignored `.t3` directory for reusable worktree-local state.
    - Use `mktemp -d /tmp/t3code-test.XXXXXX` for disposable state and retain the printed absolute path.
-3. Start the full web stack with `vp run dev`. Add `--share` when the user needs to open it from another tailnet device. In a linked worktree it defaults to that worktree's gitignored `.t3`; pass `--home-dir <base-dir>` only when the test needs a different isolated directory.
-4. Keep the terminal session alive and read the selected server port, web port, base directory, and pairing URL from its output.
+1. Start the full web stack with `vp run dev`. Add `--share` when the user needs to open it from another tailnet device. In a linked worktree it defaults to that worktree's gitignored `.t3`; pass `--home-dir <base-dir>` only when the test needs a different isolated directory.
+1. Keep the terminal session alive and read the selected server port, web port, base directory, and pairing URL from its output.
 
 Treat a base directory as disposable only when it was created or deliberately selected for the current test. Never delete or directly seed the shared `~/.t3` directory. Prefer starting with a new temporary base directory over clearing state of uncertain ownership.
 
@@ -36,6 +36,8 @@ Do not open the other person's complete pairing URL during this reachability che
 
 Treat the overall testing or implementation loop—not an assistant turn or one verification pass—as the environment lifecycle boundary.
 
+An agent terminal, PTY, or unified exec session is a same-turn owner. When Simon will inspect the web app after the current response, load `peacockery-tunnels` and move the application plus route under project-owned combined `up`, `down`, and `status` commands before handoff. Immediately verify supervisor state, login or boot enablement, loopback health, and public HTTPS health. A foreground `vp run dev` process alone never qualifies as a retained preview.
+
 - Keep the dev process, base directory, selected ports, authenticated browser tab, registered projects, and seeded fixtures alive while the user may inspect the result or request follow-up changes.
 - Do not stop the server merely because one verification pass completed or because you are yielding a response to the user.
 - Before starting another environment, check whether the existing process and browser tab still serve the task. Reuse them when healthy instead of discarding useful state.
@@ -45,10 +47,10 @@ Treat the overall testing or implementation loop—not an assistant turn or one 
 ## Authenticate the browser on the first navigation
 
 1. Wait for the server log that says authentication is required and includes a URL ending in `/pair#token=...`.
-2. Use the controlled in-app browser or browser-automation surface available to the agent. Do not use a system-browser launch command during automated testing.
-3. Open that complete URL exactly once as the controlled browser's first navigation. Preserve the fragment and token verbatim.
-4. Wait for the pairing exchange and redirect to finish before navigating elsewhere.
-5. Continue in the same browser context so its stored bearer session remains available.
+1. Use the controlled in-app browser or browser-automation surface available to the agent. Do not use a system-browser launch command during automated testing.
+1. Open that complete URL exactly once as the controlled browser's first navigation. Preserve the fragment and token verbatim.
+1. Wait for the pairing exchange and redirect to finish before navigating elsewhere.
+1. Continue in the same browser context so its stored bearer session remains available.
 
 Treat pairing URLs as secrets. Do not copy them into final responses, screenshots, committed files, or durable logs. A pairing token is short-lived and single-use; opening the URL in another browser or opening it twice can consume it.
 
@@ -87,8 +89,8 @@ Tear down when the user explicitly asks, confirms the iteration is finished, or 
 When teardown is appropriate:
 
 1. Stop the dev process with its terminal interrupt.
-2. Preserve the isolated base directory when it contains useful reproduction evidence or state for a likely follow-up.
-3. Otherwise remove only a path created for this test after resolving and verifying the exact target.
+1. Preserve the isolated base directory when it contains useful reproduction evidence or state for a likely follow-up.
+1. Otherwise remove only a path created for this test after resolving and verifying the exact target.
 
 If completion is uncertain, keep the environment alive and mention that it is retained for further iteration. A fresh isolated base directory remains the safest reset when authentication, migrations, or fixture state becomes ambiguous.
 
