@@ -10,7 +10,7 @@ import {
 } from "./modelOptions";
 
 describe("mobile model options", () => {
-  it("folds legacy models into a provider-scoped menu", () => {
+  it("lists every model in one provider-scoped menu", () => {
     const config = {
       providers: [
         {
@@ -44,17 +44,15 @@ describe("mobile model options", () => {
     expect(actions).toMatchObject([
       {
         title: "Codex",
-        subactions: [{ id: "model:codex:gpt-5.6-sol", title: "GPT-5.6 Sol" }],
-      },
-      {
-        id: "legacy-models:codex",
-        title: "Codex legacy models",
-        subactions: [{ id: "model:codex:gpt-5.4", title: "GPT-5.4" }],
+        subactions: [
+          { id: "model:codex:gpt-5.6-sol", title: "GPT-5.6 Sol" },
+          { id: "model:codex:gpt-5.4", title: "GPT-5.4" },
+        ],
       },
     ]);
   });
 
-  it("omits an empty provider menu when every model is legacy", () => {
+  it("keeps a provider menu when every advertised model carries legacy metadata", () => {
     const config = {
       providers: [
         {
@@ -81,8 +79,8 @@ describe("mobile model options", () => {
       buildModelMenuActions(groupByProvider(buildModelOptions(config, null)), null),
     ).toMatchObject([
       {
-        id: "legacy-models:codex",
-        title: "Codex legacy models",
+        id: "provider:codex",
+        title: "Codex",
         subactions: [{ id: "model:codex:gpt-5.4" }],
       },
     ]);

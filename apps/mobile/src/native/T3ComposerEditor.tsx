@@ -13,6 +13,7 @@ export function ComposerEditor({
   skills: _skills,
   selection,
   onPasteImages,
+  onContentSizeChange,
   style,
   textStyle,
   contentInsetVertical = 0,
@@ -42,18 +43,27 @@ export function ComposerEditor({
       <TextInput
         ref={inputRef}
         {...props}
+        testID={props.multiline === false ? "t3-composer-editor-compact" : "t3-composer-editor"}
         selection={selection}
+        onContentSizeChange={(event) => onContentSizeChange?.(event.nativeEvent.contentSize)}
         onSelectionChange={(event) => props.onSelectionChange?.(event.nativeEvent.selection)}
         multiline={props.multiline ?? true}
         placeholderTextColor={placeholderColor}
         style={[
           {
             flex: 1,
+            maxWidth: "100%",
             minHeight: 0,
+            minWidth: 0,
+            backgroundColor: "transparent",
+            borderWidth: 0,
             color: foregroundColor,
             fontFamily,
             ...bodyText,
             paddingVertical: contentInsetVertical,
+            overflow: "hidden",
+            outlineWidth: 0,
+            width: "100%",
           },
           textStyle,
         ]}
@@ -63,6 +73,7 @@ export function ComposerEditor({
 }
 
 export type {
+  ComposerEditorContentSize,
   ComposerEditorHandle,
   ComposerEditorProps,
   ComposerEditorSelection,

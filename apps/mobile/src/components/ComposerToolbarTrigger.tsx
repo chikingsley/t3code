@@ -13,14 +13,15 @@ import {
 } from "react-native";
 
 import { useThemeColor } from "../lib/useThemeColor";
+import { UI_CONTROL, UI_SPACE } from "../lib/ui-metrics";
 import { cn } from "../lib/cn";
 import { AppText as Text } from "./AppText";
 import { SymbolView } from "./AppSymbol";
 
-export const COMPOSER_TOOLBAR_CONTROL_HEIGHT = 44;
-export const COMPOSER_TOOLBAR_GAP = 8;
-export const COMPOSER_TOOLBAR_FADE_WIDTH = 18;
-const COMPOSER_TOOLBAR_SCROLL_EPSILON = 4;
+export const COMPOSER_TOOLBAR_CONTROL_HEIGHT = UI_CONTROL.standard;
+export const COMPOSER_TOOLBAR_GAP = UI_SPACE.compact;
+export const COMPOSER_TOOLBAR_FADE_WIDTH = UI_SPACE.gutter;
+const COMPOSER_TOOLBAR_SCROLL_EPSILON = UI_SPACE.inline;
 
 export function ComposerToolbarRow(props: {
   readonly children: ReactNode;
@@ -31,12 +32,12 @@ export function ComposerToolbarRow(props: {
 }) {
   return (
     <View
-      className="flex-row items-center gap-1.5"
+      className="flex-row items-center gap-1"
       style={[
         {
-          paddingBottom: props.paddingBottom ?? 8,
-          paddingHorizontal: props.paddingHorizontal ?? 6,
-          paddingTop: props.paddingTop ?? 8,
+          paddingBottom: props.paddingBottom ?? UI_SPACE.compact,
+          paddingHorizontal: props.paddingHorizontal ?? UI_SPACE.compact,
+          paddingTop: props.paddingTop ?? UI_SPACE.compact,
         },
         props.style,
       ]}
@@ -87,7 +88,7 @@ export function ComposerToolbarScroller(props: {
   }, []);
 
   return (
-    <View className="relative min-w-0 flex-1">
+    <View className="relative min-w-0 flex-1 overflow-hidden">
       <ScrollView
         horizontal
         keyboardShouldPersistTaps="always"
@@ -147,7 +148,7 @@ export function ComposerToolbarButton(props: {
   readonly onPress?: () => void;
   readonly showChevron?: boolean;
   readonly textTransform?: "none" | "uppercase";
-  readonly variant?: "default" | "primary" | "danger";
+  readonly variant?: "bare" | "default" | "primary" | "danger";
   readonly className?: string;
   readonly style?: StyleProp<ViewStyle>;
 }) {
@@ -182,47 +183,50 @@ export function ComposerToolbarButton(props: {
       disabled={props.disabled}
       onPress={props.onPress}
       className={cn(
-        // Default width cap lives in the class chain (not the inline style)
-        // so callers can lift it with max-w-full — flex-filling pills in the
-        // thread composer stretch to the row's edge. The numeric maxWidth
-        // prop still wins via the inline style below.
-        "h-11 max-w-[172px] flex-row items-center justify-center rounded-full active:opacity-70",
-        isCircle ? "w-11" : "gap-2 px-3.5",
-        variant === "primary"
-          ? props.disabled
-            ? "bg-subtle-strong"
-            : "bg-primary"
-          : variant === "danger"
-            ? "bg-danger"
-            : props.active
+        "h-ui-control flex-row items-center justify-center rounded-full active:opacity-70",
+        isCircle ? "w-ui-control" : "gap-2 px-3",
+        variant === "bare"
+          ? "bg-transparent"
+          : variant === "primary"
+            ? props.disabled
               ? "bg-subtle-strong"
-              : "bg-subtle",
+              : "bg-primary"
+            : variant === "danger"
+              ? "bg-danger"
+              : props.active
+                ? "bg-subtle-strong"
+                : "bg-transparent",
         props.className,
       )}
       style={({ pressed }) => [
         {
           borderColor:
-            variant === "default"
-              ? props.active
-                ? activeBorderColor
-                : defaultBorderColor
-              : filledBorderColor,
-          borderWidth: 1,
+            variant === "bare"
+              ? "transparent"
+              : variant === "default"
+                ? props.active
+                  ? activeBorderColor
+                  : defaultBorderColor
+                : filledBorderColor,
+          borderWidth: variant === "danger" ? 1 : 0,
           maxWidth: props.maxWidth,
           minWidth: props.minWidth,
           opacity: props.disabled ? 0.55 : pressed ? 0.72 : 1,
-          shadowColor: "#000",
-          shadowOffset: { width: 0, height: isDarkMode ? 3 : 2 },
-          shadowOpacity: props.disabled ? 0 : isDarkMode ? 0.24 : 0.08,
-          shadowRadius: isDarkMode ? 10 : 8,
+          shadowOpacity: 0,
         },
         props.style,
       ]}
     >
       {props.iconNode ? (
-        <View className="h-4 w-4 items-center justify-center">{props.iconNode}</View>
+        <View className="h-ui-icon w-ui-icon items-center justify-center">{props.iconNode}</View>
       ) : props.icon ? (
-        <SymbolView name={props.icon} size={16} tintColor={iconTintColor} type="monochrome" />
+        <SymbolView
+          name={props.icon}
+          size={UI_CONTROL.icon}
+          tintColor={iconTintColor}
+          type="monochrome"
+          weight={props.icon === "arrow.up" ? "bold" : undefined}
+        />
       ) : null}
       {props.label ? (
         <Text
@@ -242,7 +246,12 @@ export function ComposerToolbarButton(props: {
         </Text>
       ) : null}
       {props.showChevron === false ? null : (
-        <SymbolView name="chevron.down" size={11} tintColor={iconTintColor} type="monochrome" />
+        <SymbolView
+          name="chevron.down"
+          size={UI_CONTROL.chevron}
+          tintColor={iconTintColor}
+          type="monochrome"
+        />
       )}
     </Pressable>
   );

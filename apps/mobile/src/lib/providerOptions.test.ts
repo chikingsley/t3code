@@ -4,6 +4,7 @@ import type { ModelCapabilities } from "@t3tools/contracts";
 
 import {
   applyProviderOptionMenuEvent,
+  buildComposerConfigurationMenuActions,
   buildProviderOptionMenuActions,
   providerOptionsConfigurationLabel,
   resolveProviderOptionDescriptors,
@@ -96,5 +97,35 @@ describe("mobile provider options", () => {
       },
     ]);
     expect(providerOptionsConfigurationLabel(descriptors)).toBe("Configuration");
+  });
+
+  it("combines provider capabilities with runtime and supported interaction controls", () => {
+    const descriptors = resolveProviderOptionDescriptors({
+      capabilities: CODEX_CAPABILITIES,
+      selections: undefined,
+    });
+
+    expect(
+      buildComposerConfigurationMenuActions({
+        descriptors,
+        runtimeMode: "full-access",
+        interactionMode: "plan",
+        showInteractionModeToggle: true,
+      }),
+    ).toMatchObject([
+      { title: "Reasoning", subtitle: "Medium" },
+      { title: "Service Tier", subtitle: "Standard" },
+      { title: "Runtime", subtitle: "Full access" },
+      { title: "Interaction", subtitle: "Plan" },
+    ]);
+
+    expect(
+      buildComposerConfigurationMenuActions({
+        descriptors: [],
+        runtimeMode: "approval-required",
+        interactionMode: "default",
+        showInteractionModeToggle: false,
+      }),
+    ).toMatchObject([{ title: "Runtime", subtitle: "Approve actions" }]);
   });
 });

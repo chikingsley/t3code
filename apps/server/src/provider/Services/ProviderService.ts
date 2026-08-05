@@ -21,6 +21,7 @@ import type {
   ProviderSession,
   ProviderSessionStartInput,
   ProviderStopSessionInput,
+  ModelSelection,
   ThreadId,
   ProviderTurnStartResult,
 } from "@t3tools/contracts";
@@ -29,8 +30,11 @@ import type * as Effect from "effect/Effect";
 import type * as Stream from "effect/Stream";
 
 import type { ProviderServiceError } from "../Errors.ts";
-import type { ProviderAdapterCapabilities } from "./ProviderAdapter.ts";
-import type { ProviderThreadHistory } from "./ProviderAdapter.ts";
+import type {
+  ProviderAdapterCapabilities,
+  ProviderNativeSession,
+  ProviderThreadHistory,
+} from "./ProviderAdapter.ts";
 import type { ProviderInstanceRoutingInfo } from "./ProviderAdapterRegistry.ts";
 
 /**
@@ -87,6 +91,28 @@ export interface ProviderServiceShape {
    */
   readonly listSessions: () => Effect.Effect<ReadonlyArray<ProviderSession>>;
 
+  /** Enumerate top-level conversations owned by every configured provider instance. */
+  readonly listNativeSessions?: () => Effect.Effect<
+    ReadonlyArray<
+      ProviderNativeSession & {
+        readonly provider: ProviderRuntimeEvent["provider"];
+        readonly providerInstanceId: ProviderInstanceId;
+      }
+    >,
+    ProviderServiceError
+  >;
+
+  /** Persist the provider binding for a metadata-only adopted conversation. */
+  readonly adoptNativeSessionBinding?: (input: {
+    readonly threadId: ThreadId;
+    readonly provider: ProviderRuntimeEvent["provider"];
+    readonly providerInstanceId: ProviderInstanceId;
+    readonly cwd: string;
+    readonly resumeCursor: unknown;
+    readonly modelSelection: ModelSelection;
+    readonly nativeUpdatedAt: string;
+  }) => Effect.Effect<void, ProviderServiceError>;
+
   /**
    * Read capabilities for the adapter bound to a configured provider instance.
    */
@@ -107,9 +133,18 @@ export interface ProviderServiceShape {
     ReadonlyArray<{
       readonly threadId: ThreadId;
       readonly provider: ProviderRuntimeEvent["provider"];
+      readonly providerInstanceId?: ProviderInstanceId;
+      readonly nativeId?: string;
+      readonly nativeUpdatedAt?: string;
+      readonly historySyncedAt?: string;
     }>,
     ProviderServiceError
   >;
+
+  readonly markHistorySynced?: (
+    threadId: ThreadId,
+    nativeUpdatedAt: string,
+  ) => Effect.Effect<void, ProviderServiceError>;
 
   /**
    * Roll back provider conversation state by a number of turns.

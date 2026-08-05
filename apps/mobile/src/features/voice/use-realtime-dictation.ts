@@ -1,6 +1,7 @@
 import { AudioModule, setAudioModeAsync, useAudioStream } from "expo-audio";
 import * as React from "react";
 import { Alert } from "react-native";
+import { useSharedValue } from "react-native-reanimated";
 
 import {
   type DictationPhase,
@@ -10,6 +11,7 @@ import {
 } from "./dictation-session";
 import { RealtimeTranscriber } from "./realtime-transcriber";
 import { voiceConfig } from "./voice-config";
+import { appendWaveformLevel, pcmInt16Level } from "./waveform-levels";
 
 const SAMPLE_RATE = 16_000;
 
@@ -23,16 +25,20 @@ export function useRealtimeDictation() {
   const [errorMessage, setErrorMessage] = React.useState<string | null>(null);
   const [finalText, setFinalText] = React.useState("");
   const [interimText, setInterimText] = React.useState("");
+  const [startedAt, setStartedAt] = React.useState<number | null>(null);
   const ownerRef = React.useRef(Symbol("mobile-dictation"));
   const transcriberRef = React.useRef<RealtimeTranscriber | null>(null);
   const finalRef = React.useRef("");
   const interimRef = React.useRef("");
+  const waveformLevels = useSharedValue<ReadonlyArray<number>>([]);
 
   const { stream } = useAudioStream({
     channels: 1,
     encoding: "int16",
     onBuffer: (buffer) => {
       transcriberRef.current?.feed(buffer.data, buffer.sampleRate);
+      const level = pcmInt16Level(buffer.data);
+      waveformLevels.value = appendWaveformLevel(waveformLevels.value, level);
     },
     sampleRate: SAMPLE_RATE,
   });
@@ -52,6 +58,7 @@ export function useRealtimeDictation() {
       transcriberRef.current?.cancel();
       transcriberRef.current = null;
       await releaseCapture();
+      setStartedAt(null);
       setErrorMessage(message);
       setPhase("failed");
     },
@@ -77,6 +84,8 @@ export function useRealtimeDictation() {
       interimRef.current = "";
       setFinalText("");
       setInterimText("");
+      setStartedAt(null);
+      waveformLevels.value = [];
       transcriberRef.current = new RealtimeTranscriber(
         {
           onError: (message) => {
@@ -99,6 +108,7 @@ export function useRealtimeDictation() {
       );
       setPhase("connecting");
       await stream.start();
+      setStartedAt(Date.now());
       return null;
     } catch (error) {
       const message = error instanceof Error ? error.message : "Dictation failed to start.";
@@ -109,6 +119,7 @@ export function useRealtimeDictation() {
 
   const stop = React.useCallback(async (): Promise<DictationResult> => {
     setPhase("processing");
+    setStartedAt(null);
     await releaseCapture();
     const transcriber = transcriberRef.current;
     transcriberRef.current = null;
@@ -155,6 +166,8 @@ export function useRealtimeDictation() {
     liveText,
     phase,
     start,
+    startedAt,
     stop,
+    waveformLevels,
   };
 }

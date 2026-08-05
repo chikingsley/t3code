@@ -1276,6 +1276,7 @@ const make = Effect.gen(function* () {
           threadId: event.payload.threadId,
           requestId: event.payload.requestId,
           answers: event.payload.answers,
+          ...(event.payload.rejected ? { rejected: true } : {}),
         })
         .pipe(
           Effect.catchCause((cause) =>

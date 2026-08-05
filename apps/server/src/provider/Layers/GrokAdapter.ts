@@ -1391,6 +1391,20 @@ export function makeGrokAdapter(grokSettings: GrokSettings, options?: GrokAdapte
         yield* Deferred.succeed(pending.resolution, { _tag: "answered", answers });
       });
 
+    const rejectUserInput: GrokAdapterShape["rejectUserInput"] = (threadId, requestId) =>
+      Effect.gen(function* () {
+        const ctx = yield* requireSession(threadId);
+        const pending = ctx.pendingUserInputs.get(requestId);
+        if (!pending) {
+          return yield* new ProviderAdapterRequestError({
+            provider: PROVIDER,
+            method: "_x.ai/ask_user_question",
+            detail: `Unknown pending user-input request: ${requestId}`,
+          });
+        }
+        yield* Deferred.succeed(pending.resolution, { _tag: "cancelled" });
+      });
+
     const readThread: GrokAdapterShape["readThread"] = (threadId) =>
       Effect.gen(function* () {
         const ctx = yield* requireSession(threadId);
@@ -1454,6 +1468,7 @@ export function makeGrokAdapter(grokSettings: GrokSettings, options?: GrokAdapte
       rollbackThread,
       respondToRequest,
       respondToUserInput,
+      rejectUserInput,
       stopSession,
       listSessions,
       hasSession,
