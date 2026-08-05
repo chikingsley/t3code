@@ -123,6 +123,10 @@ const configuredAllowedHosts = (process.env.T3CODE_DEV_ALLOWED_HOSTS ?? "")
   .map((entry) => entry.trim())
   .filter((entry) => entry.length > 0);
 const allowedHosts = [".ts.net", ...configuredAllowedHosts];
+const configuredAllowedOrigins = (process.env.T3CODE_DEV_ALLOWED_ORIGINS ?? "")
+  .split(",")
+  .map((entry) => entry.trim())
+  .filter((entry) => entry.length > 0);
 
 export default defineConfig(() => {
   return {
@@ -187,6 +191,14 @@ export default defineConfig(() => {
       port,
       strictPort: true,
       allowedHosts,
+      ...(configuredAllowedOrigins.length > 0
+        ? {
+            cors: {
+              origin: configuredAllowedOrigins,
+              credentials: true,
+            },
+          }
+        : {}),
       ...(devProxyTarget
         ? {
             // One entry per shared prefix; the server's dev catch-all 404s the

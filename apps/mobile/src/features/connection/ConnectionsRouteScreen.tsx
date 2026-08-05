@@ -11,6 +11,7 @@ import { AndroidScreenHeader } from "../../components/AndroidScreenHeader";
 import { AppText as Text } from "../../components/AppText";
 import { cn } from "../../lib/cn";
 import { useRemoteConnections } from "../../state/use-remote-environment-registry";
+import { ConnectionSheetButton } from "./ConnectionSheetButton";
 import { ConnectionEnvironmentRow } from "./ConnectionEnvironmentRow";
 
 export function ConnectionsRouteScreen() {
@@ -94,9 +95,15 @@ export function ConnectionsRouteScreen() {
               />
             </View>
             <Text className="text-center text-sm leading-normal text-foreground-muted">
-              No environments connected yet.{"\n"}Tap{" "}
-              <Text className="font-t3-bold text-foreground">+</Text> to add one.
+              Connect this app to a T3 Code environment to load your threads.
             </Text>
+            <ConnectionSheetButton
+              icon="plus"
+              label="Add environment"
+              tone="primary"
+              compact
+              onPress={() => navigation.navigate("ConnectionsNew")}
+            />
           </View>
         )}
       </ScrollView>

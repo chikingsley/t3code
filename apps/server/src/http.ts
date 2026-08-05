@@ -43,6 +43,16 @@ import { browserApiCorsAllowedHeaders, browserApiCorsAllowedMethods } from "./ht
 const OTLP_TRACES_PROXY_PATH = "/api/observability/v1/traces";
 const LOOPBACK_HOSTNAMES = new Set(["127.0.0.1", "::1", "localhost"]);
 const DESKTOP_RENDERER_ORIGINS = ["t3code://app", "t3code-dev://app"];
+
+export function resolveBrowserApiCorsOrigins(
+  devUrl: URL | undefined,
+  devAllowedOrigins: ReadonlyArray<string>,
+): ReadonlyArray<string> | undefined {
+  if (!devUrl && devAllowedOrigins.length === 0) return undefined;
+
+  return [...(devUrl ? [devUrl.origin] : []), ...DESKTOP_RENDERER_ORIGINS, ...devAllowedOrigins];
+}
+
 export const httpCompressionLayer = HttpRouter.middleware(HttpMiddleware.compression(), {
   global: true,
 });
@@ -50,7 +60,7 @@ export const httpCompressionLayer = HttpRouter.middleware(HttpMiddleware.compres
 export const browserApiCorsLayer = Layer.unwrap(
   Effect.gen(function* () {
     const config = yield* ServerConfig.ServerConfig;
-    const devOrigin = config.devUrl?.origin;
+    const allowedOrigins = resolveBrowserApiCorsOrigins(config.devUrl, config.devAllowedOrigins);
     // Dev uses credentialed requests from Vite or the Electron custom origin, so both must be
     // explicit. Packaged desktop omits credentials and uses Effect's default wildcard origin.
     //
@@ -59,9 +69,9 @@ export const browserApiCorsLayer = Layer.unwrap(
     // through Vite and is same-origin (no preflight at all), so this is a
     // safety net for the desktop renderer and any direct-to-backend caller.
     return HttpRouter.cors({
-      ...(devOrigin
+      ...(allowedOrigins
         ? {
-            allowedOrigins: [devOrigin, ...DESKTOP_RENDERER_ORIGINS, ...config.devAllowedOrigins],
+            allowedOrigins,
             credentials: true,
           }
         : {}),

@@ -1,7 +1,7 @@
 import { expect, it } from "@effect/vitest";
 import { describe } from "vite-plus/test";
 
-import { isLoopbackHostname, resolveDevRedirectUrl } from "./http.ts";
+import { isLoopbackHostname, resolveBrowserApiCorsOrigins, resolveDevRedirectUrl } from "./http.ts";
 
 describe("http dev routing", () => {
   it("treats localhost and loopback addresses as local", () => {
@@ -24,5 +24,15 @@ describe("http dev routing", () => {
     expect(resolveDevRedirectUrl(devUrl, requestUrl)).toBe(
       "http://127.0.0.1:5173/pair?token=test-token",
     );
+  });
+
+  it("allows configured browser clients when the server has no dev URL", () => {
+    expect(resolveBrowserApiCorsOrigins(undefined, ["https://mobile.example.com"])).toContain(
+      "https://mobile.example.com",
+    );
+  });
+
+  it("keeps wildcard CORS for an unconfigured packaged server", () => {
+    expect(resolveBrowserApiCorsOrigins(undefined, [])).toBeUndefined();
   });
 });

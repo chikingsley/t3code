@@ -11,6 +11,7 @@ import { AndroidScreenHeader } from "../../components/AndroidScreenHeader";
 import { hasCloudPublicConfig } from "../cloud/publicConfig";
 import { CloudEnvironmentRows } from "../connection/CloudEnvironmentRows";
 import { ConnectionEnvironmentRow } from "../connection/ConnectionEnvironmentRow";
+import { ConnectionSheetButton } from "../connection/ConnectionSheetButton";
 import { splitEnvironmentSections } from "../connection/environmentSections";
 import { cn } from "../../lib/cn";
 import { useThemeColor } from "../../lib/useThemeColor";
@@ -155,9 +156,17 @@ export function SettingsEnvironmentsRouteScreen() {
               />
             </View>
             <Text className="text-center text-sm leading-normal text-foreground-muted">
-              No environments connected yet.{"\n"}Tap{" "}
-              <Text className="font-t3-bold text-foreground">+</Text> to add one.
+              Connect this app to a T3 Code environment to load your threads.
             </Text>
+            <ConnectionSheetButton
+              icon="plus"
+              label="Add environment"
+              tone="primary"
+              compact
+              onPress={() =>
+                navigation.navigate("SettingsSheet", { screen: "SettingsEnvironmentNew" })
+              }
+            />
           </View>
         )}
 
