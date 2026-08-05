@@ -683,7 +683,7 @@ export const ThreadComposer = memo(function ThreadComposer(props: ThreadComposer
         >
           {/* Attachment strip — inside the card, above the text input */}
           {showExpandedComposer ? (
-            <View className={props.draftAttachments.length > 0 ? "pb-2.5" : undefined}>
+            <View className={props.draftAttachments.length > 0 ? "px-2 pt-2 pb-2.5" : undefined}>
               <ComposerAttachmentStrip
                 attachments={props.draftAttachments}
                 onRemove={props.onRemoveDraftImage}
@@ -712,7 +712,9 @@ export const ThreadComposer = memo(function ThreadComposer(props: ThreadComposer
           ) : (
             <View
               className={
-                showExpandedComposer ? "min-w-0 flex-row items-start" : "relative min-w-0 flex-1"
+                showExpandedComposer
+                  ? "min-w-0 flex-row items-start px-2 pt-2"
+                  : "relative min-w-0 flex-1"
               }
               style={showExpandedComposer ? undefined : { paddingLeft: 13 }}
             >
@@ -809,7 +811,7 @@ export const ThreadComposer = memo(function ThreadComposer(props: ThreadComposer
           ) : null}
           {showExpandedComposer ? (
             <View>
-              <ComposerToolbarRow paddingBottom={0} paddingHorizontal={0} paddingTop={8}>
+              <ComposerToolbarRow paddingBottom={8} paddingHorizontal={8} paddingTop={8}>
                 <ComposerToolbarButton
                   accessibilityLabel="Add attachment"
                   icon="plus"

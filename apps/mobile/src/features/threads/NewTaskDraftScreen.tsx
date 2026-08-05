@@ -1045,7 +1045,7 @@ export function NewTaskDraftScreen(props: {
             }}
           >
             <ComposerSurface
-              expanded
+              expanded={isExpanded}
               isDarkMode={isDarkMode}
               style={isExpanded ? COMPOSER_EXPANDED_SURFACE_STYLE : COMPOSER_COMPACT_SURFACE_STYLE}
             >

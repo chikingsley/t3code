@@ -1,15 +1,7 @@
 import { isLiquidGlassSupported, LiquidGlassView } from "@callstack/liquid-glass";
-import { useEffect, type ReactNode } from "react";
+import type { ReactNode } from "react";
 import { Platform, View, type ViewStyle } from "react-native";
-import Animated, {
-  Easing,
-  interpolate,
-  LinearTransition,
-  ReduceMotion,
-  useAnimatedStyle,
-  useSharedValue,
-  withTiming,
-} from "react-native-reanimated";
+import Animated, { Easing, LinearTransition, ReduceMotion } from "react-native-reanimated";
 
 import { UI_SPACE } from "../lib/ui-metrics";
 
@@ -24,11 +16,14 @@ export const COMPOSER_LAYOUT_TRANSITION =
         .easing(COMPOSER_TRANSITION_EASING)
         .reduceMotion(ReduceMotion.System);
 
+// The wrapper always spans the same width. Keep horizontal padding out of the
+// animated style so this transition only reveals the composer's new height.
+
 export const COMPOSER_EXPANDED_SURFACE_STYLE: ViewStyle = {
   borderRadius: 20,
   overflow: "hidden",
-  paddingHorizontal: UI_SPACE.control,
-  paddingVertical: UI_SPACE.control,
+  paddingHorizontal: UI_SPACE.inline,
+  paddingVertical: UI_SPACE.inline,
 };
 
 export const COMPOSER_COMPACT_SURFACE_STYLE: ViewStyle = {
@@ -61,31 +56,8 @@ export function ComposerSurface(props: {
   readonly isDarkMode: boolean;
   readonly expanded: boolean;
 }) {
-  const expansionProgress = useSharedValue(props.expanded ? 1 : 0);
-  useEffect(() => {
-    expansionProgress.value = withTiming(props.expanded ? 1 : 0, {
-      duration: COMPOSER_TRANSITION_DURATION,
-      easing: COMPOSER_TRANSITION_EASING,
-      reduceMotion: ReduceMotion.System,
-    });
-  }, [expansionProgress, props.expanded]);
-
-  const animatedSurfaceStyle = useAnimatedStyle(() => ({
-    borderRadius: interpolate(expansionProgress.value, [0, 1], [999, 20]),
-    paddingHorizontal: interpolate(
-      expansionProgress.value,
-      [0, 1],
-      [UI_SPACE.inline, UI_SPACE.control],
-    ),
-    paddingVertical: interpolate(
-      expansionProgress.value,
-      [0, 1],
-      [UI_SPACE.inline, UI_SPACE.control],
-    ),
-  }));
-
   const shadowStyle: ViewStyle = {
-    borderRadius: 27,
+    borderRadius: props.style.borderRadius,
     shadowColor: "#000000",
     shadowOpacity: props.isDarkMode ? 0.35 : 0.12,
     shadowRadius: 14,
@@ -95,12 +67,16 @@ export function ComposerSurface(props: {
 
   if (isLiquidGlassSupported) {
     return (
-      <Animated.View layout={COMPOSER_LAYOUT_TRANSITION} style={shadowStyle}>
+      <Animated.View
+        accessibilityState={{ expanded: props.expanded }}
+        layout={COMPOSER_LAYOUT_TRANSITION}
+        style={shadowStyle}
+      >
         <AnimatedLiquidGlassView
           effect="regular"
           interactive
           colorScheme={props.isDarkMode ? "dark" : "light"}
-          style={[props.style, animatedSurfaceStyle]}
+          style={props.style}
         >
           {props.children}
         </AnimatedLiquidGlassView>
@@ -109,11 +85,14 @@ export function ComposerSurface(props: {
   }
 
   return (
-    <Animated.View layout={COMPOSER_LAYOUT_TRANSITION} style={shadowStyle}>
+    <Animated.View
+      accessibilityState={{ expanded: props.expanded }}
+      layout={COMPOSER_LAYOUT_TRANSITION}
+      style={shadowStyle}
+    >
       <Animated.View
         style={[
           props.style,
-          animatedSurfaceStyle,
           {
             backgroundColor: props.isDarkMode ? "rgba(44,44,46,0.96)" : "rgba(255,255,255,0.96)",
             borderWidth: 1,
