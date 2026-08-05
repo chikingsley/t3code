@@ -2,6 +2,8 @@ import {
   ApprovalRequestId,
   type AssistantDeliveryMode,
   CommandId,
+  DEFAULT_MODEL,
+  DEFAULT_PROVIDER_INTERACTION_MODE,
   EventId,
   MessageId,
   type OrchestrationEvent,
@@ -10,6 +12,7 @@ import {
   CheckpointRef,
   isToolLifecycleItemType,
   ThreadId,
+  ProjectId,
   type ThreadTokenUsageSnapshot,
   TurnId,
   type OrchestrationCheckpointSummary,
@@ -26,6 +29,7 @@ import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as Path from "effect/Path";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { makeDrainableWorker } from "@t3tools/shared/DrainableWorker";
@@ -696,6 +700,7 @@ const make = Effect.gen(function* () {
   const orchestrationEngine = yield* OrchestrationEngineService;
   const projectionSnapshotQuery = yield* ProjectionSnapshotQuery;
   const providerService = yield* ProviderService;
+  const path = yield* Path.Path;
   const projectionTurnRepository = yield* ProjectionTurnRepository;
   const serverSettingsService = yield* ServerSettingsService;
   const providerCommandId = (event: ProviderRuntimeEvent, tag: string) =>
@@ -709,6 +714,164 @@ const make = Effect.gen(function* () {
     lookup: () => Effect.succeed(true as const),
   });
 
+  const modelForNativeSession = (input: { readonly provider: string; readonly model?: string }) =>
+    input.model ?? (input.provider === "codex" ? DEFAULT_MODEL : "opencode/default");
+
+  const reconcileNativeSessionCatalog = Effect.fn("reconcileNativeSessionCatalog")(function* () {
+    if (
+      !providerService.listNativeSessions ||
+      !providerService.listHistoryBindings ||
+      !providerService.adoptNativeSessionBinding
+    ) {
+      return;
+    }
+    const [nativeSessions, bindings, readModel] = yield* Effect.all(
+      [
+        providerService.listNativeSessions(),
+        providerService.listHistoryBindings(),
+        projectionSnapshotQuery.getCommandReadModel(),
+      ],
+      { concurrency: 1 },
+    );
+    const bindingByNativeKey = new Map<string, (typeof bindings)[number]>(
+      bindings.flatMap((binding) =>
+        binding.providerInstanceId && binding.nativeId
+          ? [[`${binding.providerInstanceId}:${binding.nativeId}`, binding] as const]
+          : [],
+      ),
+    );
+    const threadById = new Map(readModel.threads.map((thread) => [thread.id, thread]));
+    const projectByWorkspaceRoot = new Map(
+      readModel.projects
+        .filter((project) => project.deletedAt === null)
+        .map((project) => [project.workspaceRoot, project]),
+    );
+
+    yield* Effect.forEach(
+      nativeSessions,
+      (nativeSession) =>
+        Effect.gen(function* () {
+          const nativeKey = `${nativeSession.providerInstanceId}:${nativeSession.nativeId}`;
+          const existingBinding = bindingByNativeKey.get(nativeKey);
+          const existingThread = existingBinding
+            ? threadById.get(existingBinding.threadId)
+            : undefined;
+          const modelSelection = existingThread
+            ? nativeSession.model
+              ? {
+                  ...existingThread.modelSelection,
+                  instanceId: nativeSession.providerInstanceId,
+                  model: nativeSession.model,
+                }
+              : existingThread.modelSelection
+            : {
+                instanceId: nativeSession.providerInstanceId,
+                model: modelForNativeSession(nativeSession),
+              };
+
+          let threadId = existingBinding?.threadId;
+          if (!threadId) {
+            let project = projectByWorkspaceRoot.get(nativeSession.cwd);
+            if (!project) {
+              const projectId = ProjectId.make(yield* crypto.randomUUIDv4);
+              yield* orchestrationEngine.dispatch({
+                type: "project.create",
+                commandId: CommandId.make(yield* crypto.randomUUIDv4),
+                projectId,
+                title: path.basename(nativeSession.cwd) || "project",
+                workspaceRoot: nativeSession.cwd,
+                defaultModelSelection: modelSelection,
+                createdAt: nativeSession.createdAt,
+              });
+              project = {
+                id: projectId,
+                title: path.basename(nativeSession.cwd) || "project",
+                workspaceRoot: nativeSession.cwd,
+                defaultModelSelection: modelSelection,
+                scripts: [],
+                createdAt: nativeSession.createdAt,
+                updatedAt: nativeSession.updatedAt,
+                deletedAt: null,
+              };
+              projectByWorkspaceRoot.set(nativeSession.cwd, project);
+            }
+            threadId = ThreadId.make(yield* crypto.randomUUIDv4);
+            yield* orchestrationEngine.dispatch({
+              type: "thread.create",
+              commandId: CommandId.make(yield* crypto.randomUUIDv4),
+              threadId,
+              projectId: project.id,
+              title: nativeSession.title,
+              modelSelection,
+              interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
+              runtimeMode: "full-access",
+              branch: null,
+              worktreePath: null,
+              createdAt: nativeSession.createdAt,
+            });
+            if (nativeSession.archived) {
+              yield* orchestrationEngine.dispatch({
+                type: "thread.archive",
+                commandId: CommandId.make(yield* crypto.randomUUIDv4),
+                threadId,
+              });
+            }
+            bindingByNativeKey.set(nativeKey, {
+              threadId,
+              provider: nativeSession.provider,
+              providerInstanceId: nativeSession.providerInstanceId,
+              nativeId: nativeSession.nativeId,
+            });
+          } else if (existingThread) {
+            if (
+              existingThread.title !== nativeSession.title ||
+              existingThread.modelSelection.instanceId !== modelSelection.instanceId ||
+              existingThread.modelSelection.model !== modelSelection.model
+            ) {
+              yield* orchestrationEngine.dispatch({
+                type: "thread.meta.update",
+                commandId: CommandId.make(yield* crypto.randomUUIDv4),
+                threadId,
+                ...(existingThread.title !== nativeSession.title
+                  ? { title: nativeSession.title }
+                  : {}),
+                ...(existingThread.modelSelection.instanceId !== modelSelection.instanceId ||
+                existingThread.modelSelection.model !== modelSelection.model
+                  ? { modelSelection }
+                  : {}),
+              });
+            }
+            if (nativeSession.archived && existingThread.archivedAt === null) {
+              yield* orchestrationEngine.dispatch({
+                type: "thread.archive",
+                commandId: CommandId.make(yield* crypto.randomUUIDv4),
+                threadId,
+              });
+            } else if (!nativeSession.archived && existingThread.archivedAt !== null) {
+              yield* orchestrationEngine.dispatch({
+                type: "thread.unarchive",
+                commandId: CommandId.make(yield* crypto.randomUUIDv4),
+                threadId,
+              });
+            }
+          }
+
+          if (!existingBinding || existingBinding.nativeUpdatedAt !== nativeSession.updatedAt) {
+            yield* providerService.adoptNativeSessionBinding!({
+              threadId,
+              provider: nativeSession.provider,
+              providerInstanceId: nativeSession.providerInstanceId,
+              cwd: nativeSession.cwd,
+              resumeCursor: nativeSession.resumeCursor,
+              modelSelection,
+              nativeUpdatedAt: nativeSession.updatedAt,
+            });
+          }
+        }),
+      { concurrency: 1, discard: true },
+    );
+  });
+
   const reconcileProviderHistory = Effect.fn("reconcileProviderHistory")(function* () {
     if (!providerService.readHistory || !providerService.listHistoryBindings) return;
     const bindings = yield* providerService.listHistoryBindings();
@@ -719,6 +882,11 @@ const make = Effect.gen(function* () {
         Effect.gen(function* () {
           if (seen.has(binding.threadId)) return;
           seen.add(binding.threadId);
+          if (
+            binding.nativeUpdatedAt !== undefined &&
+            binding.nativeUpdatedAt === binding.historySyncedAt
+          )
+            return;
           if (Option.isSome(yield* Cache.getOption(historyFailureBackoff, binding.threadId)))
             return;
           const history = yield* providerService.readHistory!(binding.threadId);
@@ -792,7 +960,12 @@ const make = Effect.gen(function* () {
               },
             ];
           });
-          if (messages.length === 0 && activities.length === 0) return;
+          if (messages.length === 0 && activities.length === 0) {
+            if (binding.nativeUpdatedAt && providerService.markHistorySynced) {
+              yield* providerService.markHistorySynced(binding.threadId, binding.nativeUpdatedAt);
+            }
+            return;
+          }
           const commandId = yield* crypto.randomUUIDv4.pipe(
             Effect.map((uuid) => CommandId.make(`provider-history:${binding.threadId}:${uuid}`)),
           );
@@ -815,6 +988,9 @@ const make = Effect.gen(function* () {
                   : Effect.fail(error),
               ),
             );
+          if (binding.nativeUpdatedAt && providerService.markHistorySynced) {
+            yield* providerService.markHistorySynced(binding.threadId, binding.nativeUpdatedAt);
+          }
         }).pipe(
           Effect.catchCause((cause) =>
             Cache.set(historyFailureBackoff, binding.threadId, true).pipe(
@@ -1952,7 +2128,23 @@ const make = Effect.gen(function* () {
         }),
       );
       yield* forkParked(
+        reconcileNativeSessionCatalog().pipe(
+          Effect.catchCause((cause) =>
+            Effect.logWarning("provider native session synchronization failed", {
+              cause: Cause.pretty(cause),
+            }),
+          ),
+          Effect.repeat(Schedule.spaced("30 seconds")),
+          Effect.asVoid,
+        ),
+      );
+      yield* forkParked(
         reconcileProviderHistory().pipe(
+          Effect.catchCause((cause) =>
+            Effect.logWarning("provider history synchronization failed", {
+              cause: Cause.pretty(cause),
+            }),
+          ),
           Effect.repeat(Schedule.spaced("15 seconds")),
           Effect.asVoid,
         ),

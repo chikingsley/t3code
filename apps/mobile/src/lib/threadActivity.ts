@@ -26,7 +26,7 @@ export interface PendingUserInput {
 }
 
 export interface PendingUserInputDraftAnswer {
-  readonly selectedOptionLabel?: string;
+  readonly selectedOptionLabels?: ReadonlyArray<string>;
   readonly customAnswer?: string;
 }
 
@@ -227,12 +227,14 @@ function normalizeDraftAnswer(value: string | undefined): string | null {
 
 function resolvePendingUserInputAnswer(
   draft: PendingUserInputDraftAnswer | undefined,
-): string | null {
+): string | ReadonlyArray<string> | null {
   const customAnswer = normalizeDraftAnswer(draft?.customAnswer);
   if (customAnswer) {
     return customAnswer;
   }
-  return normalizeDraftAnswer(draft?.selectedOptionLabel);
+  const selected = draft?.selectedOptionLabels?.filter((label) => label.trim().length > 0) ?? [];
+  if (selected.length === 0) return null;
+  return selected.length === 1 ? selected[0]! : selected;
 }
 
 function deriveWorkLogEntries(
@@ -1334,19 +1336,19 @@ export function setPendingUserInputCustomAnswer(
   draft: PendingUserInputDraftAnswer | undefined,
   customAnswer: string,
 ): PendingUserInputDraftAnswer {
-  const selectedOptionLabel =
-    customAnswer.trim().length > 0 ? undefined : draft?.selectedOptionLabel;
+  const selectedOptionLabels =
+    customAnswer.trim().length > 0 ? undefined : draft?.selectedOptionLabels;
   return {
     customAnswer,
-    ...(selectedOptionLabel ? { selectedOptionLabel } : {}),
+    ...(selectedOptionLabels ? { selectedOptionLabels } : {}),
   };
 }
 
 export function buildPendingUserInputAnswers(
   questions: ReadonlyArray<UserInputQuestion>,
   draftAnswers: Record<string, PendingUserInputDraftAnswer>,
-): Record<string, string> | null {
-  const answers: Record<string, string> = {};
+): Record<string, string | ReadonlyArray<string>> | null {
+  const answers: Record<string, string | ReadonlyArray<string>> = {};
 
   for (const question of questions) {
     const answer = resolvePendingUserInputAnswer(draftAnswers[question.id]);

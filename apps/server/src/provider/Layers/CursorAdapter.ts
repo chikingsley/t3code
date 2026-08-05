@@ -1108,6 +1108,9 @@ export function makeCursorAdapter(
         yield* Deferred.succeed(pending.answers, answers);
       });
 
+    const rejectUserInput: CursorAdapterShape["rejectUserInput"] = (threadId, requestId) =>
+      respondToUserInput(threadId, requestId, {});
+
     const readThread: CursorAdapterShape["readThread"] = (threadId) =>
       Effect.gen(function* () {
         const ctx = yield* requireSession(threadId);
@@ -1172,6 +1175,7 @@ export function makeCursorAdapter(
       rollbackThread,
       respondToRequest,
       respondToUserInput,
+      rejectUserInput,
       stopSession,
       listSessions,
       hasSession,

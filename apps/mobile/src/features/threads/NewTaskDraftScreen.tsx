@@ -22,16 +22,20 @@ import {
 } from "../../components/ComposerToolbarTrigger";
 import { AndroidScreenHeader } from "../../components/AndroidScreenHeader";
 import { ComposerAttachmentStrip } from "../../components/ComposerAttachmentStrip";
+import {
+  COMPOSER_COMPACT_SURFACE_STYLE,
+  COMPOSER_EXPANDED_SURFACE_STYLE,
+  ComposerSurface,
+} from "../../components/ComposerChrome";
 import { ControlPill, ControlPillMenu } from "../../components/ControlPill";
 import { ProviderIcon } from "../../components/ProviderIcon";
-import { ComposerSurface } from "./ThreadComposer";
 import { DictationButton } from "../voice/DictationButton";
 
 import { makeTurnCommandMetadata } from "../../lib/commandMetadata";
 import { convertPastedImagesToAttachments, pickComposerImages } from "../../lib/composerImages";
 import {
   applyProviderOptionMenuEvent,
-  buildProviderOptionMenuActions,
+  buildComposerConfigurationMenuActions,
   providerOptionsConfigurationLabel,
   resolveProviderOptionDescriptors,
 } from "../../lib/providerOptions";
@@ -564,53 +568,20 @@ export function NewTaskDraftScreen(props: {
       }),
     [flow.selectedModel?.options, flow.selectedModelOption?.capabilities],
   );
+  const showInteractionModeToggle =
+    selectedEnvironmentServerConfig?.providers.find(
+      (provider) => provider.instanceId === flow.selectedModel?.instanceId,
+    )?.showInteractionModeToggle ?? false;
 
   const optionsMenuActions = useMemo(
-    () => [
-      ...buildProviderOptionMenuActions(providerOptionDescriptors),
-      {
-        id: "options-runtime",
-        title: "Runtime",
-        subtitle:
-          flow.runtimeMode === "approval-required"
-            ? "Approve actions"
-            : flow.runtimeMode === "auto-accept-edits"
-              ? "Auto-accept edits"
-              : flow.runtimeMode === "auto"
-                ? "Auto"
-                : "Full access",
-        subactions: [
-          { id: "options:runtime:approval-required", title: "Approve actions" },
-          { id: "options:runtime:auto-accept-edits", title: "Auto-accept edits" },
-          { id: "options:runtime:auto", title: "Auto" },
-          { id: "options:runtime:full-access", title: "Full access" },
-        ].map((option) => {
-          const value = option.id.replace("options:runtime:", "");
-          return {
-            id: option.id,
-            title: option.title,
-            state: flow.runtimeMode === value ? ("on" as const) : undefined,
-          };
-        }),
-      },
-      {
-        id: "options-interaction",
-        title: "Interaction",
-        subtitle: flow.interactionMode === "plan" ? "Plan" : "Default",
-        subactions: [
-          { id: "options:interaction:default", title: "Default" },
-          { id: "options:interaction:plan", title: "Plan" },
-        ].map((option) => {
-          const value = option.id.replace("options:interaction:", "");
-          return {
-            id: option.id,
-            title: option.title,
-            state: flow.interactionMode === value ? ("on" as const) : undefined,
-          };
-        }),
-      },
-    ],
-    [flow.interactionMode, flow.runtimeMode, providerOptionDescriptors],
+    () =>
+      buildComposerConfigurationMenuActions({
+        descriptors: providerOptionDescriptors,
+        runtimeMode: flow.runtimeMode,
+        interactionMode: flow.interactionMode,
+        showInteractionModeToggle,
+      }),
+    [flow.interactionMode, flow.runtimeMode, providerOptionDescriptors, showInteractionModeToggle],
   );
 
   const workspaceMenuActions = useMemo(() => {
@@ -999,7 +970,7 @@ export function NewTaskDraftScreen(props: {
         <ComposerToolbarTrigger
           accessibilityLabel="Model"
           disabled={isIncomingShareTransferPending}
-          iconNode={<ProviderIcon provider={flow.selectedModelOption?.providerDriver} size={16} />}
+          iconNode={<ProviderIcon provider={flow.selectedModelOption?.providerDriver} size={20} />}
           label={flow.selectedModelOption?.label ?? "Model"}
         />
       </ControlPillMenu>
@@ -1074,25 +1045,9 @@ export function NewTaskDraftScreen(props: {
             }}
           >
             <ComposerSurface
+              expanded
               isDarkMode={isDarkMode}
-              style={
-                isExpanded
-                  ? {
-                      borderRadius: 20,
-                      overflow: "hidden",
-                      paddingHorizontal: 14,
-                      paddingVertical: 12,
-                    }
-                  : {
-                      borderRadius: 999,
-                      overflow: "hidden",
-                      flexDirection: "row",
-                      alignItems: "center",
-                      paddingLeft: 18,
-                      paddingRight: 5,
-                      paddingVertical: 5,
-                    }
-              }
+              style={isExpanded ? COMPOSER_EXPANDED_SURFACE_STYLE : COMPOSER_COMPACT_SURFACE_STYLE}
             >
               {isExpanded && flow.attachments.length > 0 ? (
                 <View className="pb-2.5">
@@ -1104,7 +1059,12 @@ export function NewTaskDraftScreen(props: {
                   />
                 </View>
               ) : null}
-              <View className={isExpanded ? undefined : "min-w-0 flex-1"}>{promptEditor}</View>
+              <View
+                className={isExpanded ? undefined : "min-w-0 flex-1"}
+                style={isExpanded ? undefined : { paddingLeft: 13 }}
+              >
+                {promptEditor}
+              </View>
               {!isExpanded ? (
                 <>
                   <DictationButton variant="pill" onCommit={handleCommitDictation} />
@@ -1154,7 +1114,7 @@ export function NewTaskDraftScreen(props: {
               />
             </View>
           ) : null}
-          <ComposerToolbarRow paddingBottom={controlsBottomPadding} paddingHorizontal={6}>
+          <ComposerToolbarRow paddingBottom={controlsBottomPadding} paddingHorizontal={8}>
             <ComposerToolbarScroller
               fadeOpaque={sheetFadeOpaque}
               fadeTransparent={sheetFadeTransparent}

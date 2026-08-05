@@ -23,14 +23,25 @@ const userInputDraftsByRequestKeyAtom = Atom.make<
   Record<string, Record<string, PendingUserInputDraftAnswer>>
 >({}).pipe(Atom.keepAlive, Atom.withLabel("mobile:user-input-drafts"));
 
-function setUserInputDraftOption(requestKey: string, questionId: string, label: string): void {
+function setUserInputDraftOption(
+  requestKey: string,
+  questionId: string,
+  label: string,
+  multiSelect: boolean,
+): void {
   const current = appAtomRegistry.get(userInputDraftsByRequestKeyAtom);
+  const selected = current[requestKey]?.[questionId]?.selectedOptionLabels ?? [];
+  const selectedOptionLabels = multiSelect
+    ? selected.includes(label)
+      ? selected.filter((value) => value !== label)
+      : [...selected, label]
+    : [label];
   appAtomRegistry.set(userInputDraftsByRequestKeyAtom, {
     ...current,
     [requestKey]: {
       ...current[requestKey],
       [questionId]: {
-        selectedOptionLabel: label,
+        selectedOptionLabels,
       },
     },
   });
@@ -62,6 +73,10 @@ export function useSelectedThreadRequests() {
   const respondToUserInput = useAtomCommand(
     threadEnvironment.respondToUserInput,
     "thread user input response",
+  );
+  const rejectUserInput = useAtomCommand(
+    threadEnvironment.rejectUserInput,
+    "thread user input rejection",
   );
   const { selectedThread: selectedThreadShell } = useThreadSelection();
   const selectedThread = useSelectedThreadDetail();
@@ -103,9 +118,10 @@ export function useSelectedThreadRequests() {
       }
 
       const requestKey = scopedRequestKey(selectedThreadShell.environmentId, requestId);
-      setUserInputDraftOption(requestKey, questionId, label);
+      const question = activePendingUserInput?.questions.find((entry) => entry.id === questionId);
+      setUserInputDraftOption(requestKey, questionId, label, question?.multiSelect === true);
     },
-    [selectedThreadShell],
+    [activePendingUserInput, selectedThreadShell],
   );
 
   const onChangeUserInputCustomAnswer = useCallback(
@@ -166,6 +182,22 @@ export function useSelectedThreadRequests() {
     selectedThreadShell,
   ]);
 
+  const onRejectUserInput = useCallback(async () => {
+    if (!selectedThreadShell || !activePendingUserInput) return;
+    setRespondingUserInputId(activePendingUserInput.requestId);
+    const result = await rejectUserInput({
+      environmentId: selectedThreadShell.environmentId,
+      input: {
+        threadId: selectedThreadShell.id,
+        requestId: activePendingUserInput.requestId,
+      },
+    });
+    setRespondingUserInputId((current) =>
+      current === activePendingUserInput.requestId ? null : current,
+    );
+    return result;
+  }, [activePendingUserInput, rejectUserInput, selectedThreadShell]);
+
   return {
     activePendingApproval,
     activePendingUserInput,
@@ -177,5 +209,6 @@ export function useSelectedThreadRequests() {
     onSelectUserInputOption,
     onChangeUserInputCustomAnswer,
     onSubmitUserInput,
+    onRejectUserInput,
   };
 }

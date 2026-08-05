@@ -157,7 +157,10 @@ interface PendingApproval {
 
 interface PendingUserInput {
   readonly questions: ReadonlyArray<UserInputQuestion>;
-  readonly answers: Deferred.Deferred<ProviderUserInputAnswers>;
+  readonly answers: Deferred.Deferred<
+    | { readonly _tag: "answered"; readonly answers: ProviderUserInputAnswers }
+    | { readonly _tag: "cancelled" }
+  >;
 }
 
 interface ToolInFlight {
@@ -3230,7 +3233,10 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
           }),
         );
 
-        const answersDeferred = yield* Deferred.make<ProviderUserInputAnswers>();
+        const answersDeferred = yield* Deferred.make<
+          | { readonly _tag: "answered"; readonly answers: ProviderUserInputAnswers }
+          | { readonly _tag: "cancelled" }
+        >();
         let aborted = false;
         const pendingInput: PendingUserInput = {
           questions,
@@ -3274,14 +3280,15 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
           }
           aborted = true;
           pendingUserInputs.delete(requestId);
-          runFork(Deferred.succeed(answersDeferred, {} as ProviderUserInputAnswers));
+          runFork(Deferred.succeed(answersDeferred, { _tag: "cancelled" }));
         };
         callbackOptions.signal.addEventListener("abort", onAbort, {
           once: true,
         });
 
         // Block until the user provides answers.
-        const answers = yield* Deferred.await(answersDeferred);
+        const resolution = yield* Deferred.await(answersDeferred);
+        const answers = resolution._tag === "answered" ? resolution.answers : {};
         pendingUserInputs.delete(requestId);
 
         // Emit user-input.resolved so the UI knows the interaction completed.
@@ -3309,7 +3316,7 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
           },
         });
 
-        if (aborted) {
+        if (aborted || resolution._tag === "cancelled") {
           return {
             behavior: "deny",
             message: "User cancelled tool execution.",
@@ -3880,8 +3887,24 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
     }
 
     context.pendingUserInputs.delete(requestId);
-    yield* Deferred.succeed(pending.answers, answers);
+    yield* Deferred.succeed(pending.answers, { _tag: "answered", answers });
   });
+
+  const rejectUserInput: ClaudeAdapterShape["rejectUserInput"] = Effect.fn("rejectUserInput")(
+    function* (threadId, requestId) {
+      const context = yield* requireSession(threadId);
+      const pending = context.pendingUserInputs.get(requestId);
+      if (!pending) {
+        return yield* new ProviderAdapterRequestError({
+          provider: PROVIDER,
+          method: "item/tool/rejectUserInput",
+          detail: `Unknown pending user-input request: ${requestId}`,
+        });
+      }
+      context.pendingUserInputs.delete(requestId);
+      yield* Deferred.succeed(pending.answers, { _tag: "cancelled" });
+    },
+  );
 
   const stopSession: ClaudeAdapterShape["stopSession"] = Effect.fn("stopSession")(
     function* (threadId) {
@@ -3940,6 +3963,7 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
     rollbackThread,
     respondToRequest,
     respondToUserInput,
+    rejectUserInput,
     stopSession,
     listSessions,
     hasSession,

@@ -7,14 +7,24 @@ export interface VoiceConfig {
   readonly model: string;
 }
 
+const usesWebPreviewProxy = process.env.EXPO_PUBLIC_T3CODE_VOICE_PROXY === "1";
+
 export function voiceConfig(): VoiceConfig {
+  const previewOrigin =
+    usesWebPreviewProxy && typeof globalThis.location?.origin === "string"
+      ? `${globalThis.location.origin}/peacockery-voice`
+      : null;
+  const configuredBaseUrl = process.env.EXPO_PUBLIC_PEACOCKERY_VOICE_BASE_URL?.trim();
+
   return {
-    apiKey: process.env.EXPO_PUBLIC_PEACOCKERY_VOICE_API_KEY?.trim() ?? "",
-    baseUrl: process.env.EXPO_PUBLIC_PEACOCKERY_VOICE_BASE_URL?.trim() || VOICE_LAB_BASE_URL,
+    apiKey: usesWebPreviewProxy
+      ? ""
+      : (process.env.EXPO_PUBLIC_PEACOCKERY_VOICE_API_KEY?.trim() ?? ""),
+    baseUrl: previewOrigin ?? (configuredBaseUrl || VOICE_LAB_BASE_URL),
     model: process.env.EXPO_PUBLIC_PEACOCKERY_VOICE_MODEL?.trim() || DEFAULT_VOICE_MODEL,
   };
 }
 
 export function isVoiceConfigured(): boolean {
-  return voiceConfig().apiKey.length > 0;
+  return usesWebPreviewProxy || voiceConfig().apiKey.length > 0;
 }

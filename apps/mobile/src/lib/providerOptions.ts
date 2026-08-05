@@ -1,7 +1,9 @@
 import type {
   ModelCapabilities,
+  ProviderInteractionMode,
   ProviderOptionDescriptor,
   ProviderOptionSelection,
+  RuntimeMode,
 } from "@t3tools/contracts";
 import type { MenuAction } from "@react-native-menu/menu";
 import {
@@ -91,6 +93,57 @@ export function buildProviderOptionMenuActions(
       subactions: choices,
     };
   });
+}
+
+export function buildComposerConfigurationMenuActions(input: {
+  readonly descriptors: ReadonlyArray<ProviderOptionDescriptor>;
+  readonly runtimeMode: RuntimeMode;
+  readonly interactionMode: ProviderInteractionMode;
+  readonly showInteractionModeToggle: boolean;
+}): ReadonlyArray<MenuAction> {
+  return [
+    ...buildProviderOptionMenuActions(input.descriptors),
+    {
+      id: "options-runtime",
+      title: "Runtime",
+      subtitle:
+        input.runtimeMode === "approval-required"
+          ? "Approve actions"
+          : input.runtimeMode === "auto-accept-edits"
+            ? "Auto-accept edits"
+            : input.runtimeMode === "auto"
+              ? "Auto"
+              : "Full access",
+      subactions: [
+        { id: "options:runtime:approval-required", title: "Approve actions" },
+        { id: "options:runtime:auto-accept-edits", title: "Auto-accept edits" },
+        { id: "options:runtime:auto", title: "Auto" },
+        { id: "options:runtime:full-access", title: "Full access" },
+      ].map((option) => ({
+        ...option,
+        state: input.runtimeMode === option.id.slice("options:runtime:".length) ? "on" : undefined,
+      })),
+    },
+    ...(input.showInteractionModeToggle
+      ? [
+          {
+            id: "options-interaction",
+            title: "Interaction",
+            subtitle: input.interactionMode === "plan" ? "Plan" : "Default",
+            subactions: [
+              { id: "options:interaction:default", title: "Default" },
+              { id: "options:interaction:plan", title: "Plan" },
+            ].map((option) => ({
+              ...option,
+              state:
+                input.interactionMode === option.id.slice("options:interaction:".length)
+                  ? ("on" as const)
+                  : undefined,
+            })),
+          },
+        ]
+      : []),
+  ];
 }
 
 export function providerOptionsConfigurationLabel(

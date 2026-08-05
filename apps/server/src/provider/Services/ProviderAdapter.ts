@@ -72,6 +72,18 @@ export interface ProviderThreadSnapshot {
   readonly turns: ReadonlyArray<ProviderThreadTurnSnapshot>;
 }
 
+/** Lightweight provider-owned conversation metadata used for automatic adoption. */
+export interface ProviderNativeSession {
+  readonly nativeId: string;
+  readonly title: string;
+  readonly cwd: string;
+  readonly createdAt: string;
+  readonly updatedAt: string;
+  readonly archived: boolean;
+  readonly resumeCursor: unknown;
+  readonly model?: string;
+}
+
 export interface ProviderAdapterShape<TError> {
   /**
    * Provider kind implemented by this adapter.
@@ -117,6 +129,14 @@ export interface ProviderAdapterShape<TError> {
   ) => Effect.Effect<void, TError>;
 
   /**
+   * Reject a structured user-input request without fabricating answers.
+   */
+  readonly rejectUserInput?: (
+    threadId: ThreadId,
+    requestId: ApprovalRequestId,
+  ) => Effect.Effect<void, TError>;
+
+  /**
    * Stop one provider session.
    */
   readonly stopSession: (threadId: ThreadId) => Effect.Effect<void, TError>;
@@ -143,6 +163,9 @@ export interface ProviderAdapterShape<TError> {
   readonly readHistoryFromResume?: (
     input: ProviderSessionStartInput,
   ) => Effect.Effect<ProviderThreadHistory, TError>;
+
+  /** Enumerate top-level provider conversations without starting agent sessions. */
+  readonly listNativeSessions?: () => Effect.Effect<ReadonlyArray<ProviderNativeSession>, TError>;
 
   /**
    * Roll back a provider thread by N turns.

@@ -936,6 +936,27 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
       };
     }
 
+    case "thread.user-input.reject": {
+      yield* requireThread({ readModel, command, threadId: command.threadId });
+      return {
+        ...(yield* withEventBase({
+          aggregateKind: "thread",
+          aggregateId: command.threadId,
+          occurredAt: command.createdAt,
+          commandId: command.commandId,
+          metadata: { requestId: command.requestId },
+        })),
+        type: "thread.user-input-response-requested",
+        payload: {
+          threadId: command.threadId,
+          requestId: command.requestId,
+          answers: {},
+          rejected: true,
+          createdAt: command.createdAt,
+        },
+      };
+    }
+
     case "thread.checkpoint.revert": {
       yield* requireThread({
         readModel,

@@ -12,11 +12,34 @@ import {
 } from "@t3tools/contracts";
 
 import {
+  buildPendingUserInputAnswers,
   buildThreadFeed,
   deriveThreadFeedPresentation,
   type ThreadFeedActivity,
   type ThreadFeedEntry,
 } from "./threadActivity";
+
+describe("structured user input answers", () => {
+  it("preserves provider multi-select answers", () => {
+    expect(
+      buildPendingUserInputAnswers(
+        [
+          {
+            id: "tools",
+            header: "Tools",
+            question: "Which tools?",
+            options: [
+              { label: "Read", description: "Read files" },
+              { label: "Test", description: "Run tests" },
+            ],
+            multiSelect: true,
+          },
+        ],
+        { tools: { selectedOptionLabels: ["Read", "Test"] } },
+      ),
+    ).toEqual({ tools: ["Read", "Test"] });
+  });
+});
 
 function makeActivity(
   input: Partial<OrchestrationThreadActivity> &

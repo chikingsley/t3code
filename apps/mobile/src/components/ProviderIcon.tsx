@@ -1,5 +1,6 @@
-import { useColorScheme } from "react-native";
 import { Path, Svg } from "react-native-svg";
+
+import { useThemeColor } from "../lib/useThemeColor";
 
 type ProviderIconProps = {
   readonly provider: string | null | undefined;
@@ -7,14 +8,14 @@ type ProviderIconProps = {
 };
 
 export function ProviderIcon(props: ProviderIconProps) {
-  const isDarkMode = useColorScheme() === "dark";
   const size = props.size ?? 16;
-  const monochromeFill = isDarkMode ? "#e5e5e5" : "#171717";
+  const monochromeFill = useThemeColor("--color-icon");
+  const subtleFill = useThemeColor("--color-icon-subtle");
 
   if (props.provider === "opencode") {
     return (
       <Svg width={size} height={size} viewBox="0 0 32 40" fill="none">
-        <Path d="M24 32H8V16H24V32Z" fill={isDarkMode ? "#4B4646" : "#CFCECD"} />
+        <Path d="M24 32H8V16H24V32Z" fill={subtleFill} />
         <Path d="M24 8H8V32H24V8ZM32 40H0V0H32V40Z" fill={monochromeFill} />
       </Svg>
     );

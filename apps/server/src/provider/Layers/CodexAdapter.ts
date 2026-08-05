@@ -15,6 +15,7 @@ import {
   type ProviderEvent,
   ProviderInstanceId,
   type ProviderRuntimeEvent,
+  type ProviderSessionStartInput,
   type ProviderRequestKind,
   type ThreadTokenUsageSnapshot,
   type ProviderUserInputAnswers,
@@ -36,11 +37,15 @@ import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
+import * as Layer from "effect/Layer";
+import * as ChildProcess from "effect/unstable/process/ChildProcess";
 import { ChildProcessSpawner } from "effect/unstable/process";
 import * as CodexErrors from "effect-codex-app-server/errors";
+import * as CodexClient from "effect-codex-app-server/client";
 import * as EffectCodexSchema from "effect-codex-app-server/schema";
 
 import { getModelSelectionStringOptionValue } from "@t3tools/shared/model";
+import { resolveSpawnCommand } from "@t3tools/shared/shell";
 import { getCodexServiceTierOptionValue } from "../../codexModelOptions.ts";
 import * as McpProviderSession from "../../mcp/McpProviderSession.ts";
 
@@ -56,6 +61,7 @@ import { type CodexAdapterShape } from "../Services/CodexAdapter.ts";
 import type {
   ProviderHistoryActivity,
   ProviderHistoryMessage,
+  ProviderNativeSession,
   ProviderThreadHistory,
 } from "../Services/ProviderAdapter.ts";
 import { resolveAttachmentPath } from "../../attachmentStore.ts";
@@ -69,7 +75,9 @@ import {
   type CodexSessionRuntimeShape,
 } from "./CodexSessionRuntime.ts";
 import { type EventNdjsonLogger, makeEventNdjsonLogger } from "./EventNdjsonLogger.ts";
-import { resolveCodexLaunchArgs } from "./codexLaunchArgs.ts";
+import { expandHomePath } from "../../pathExpansion.ts";
+import { buildCodexInitializeParams } from "./CodexProvider.ts";
+import { codexAppServerArgs, resolveCodexLaunchArgs } from "./codexLaunchArgs.ts";
 const isCodexAppServerProcessExitedError = Schema.is(CodexErrors.CodexAppServerProcessExitedError);
 const isCodexAppServerTransportError = Schema.is(CodexErrors.CodexAppServerTransportError);
 const isCodexSessionRuntimeThreadIdMissingError = Schema.is(
@@ -78,6 +86,7 @@ const isCodexSessionRuntimeThreadIdMissingError = Schema.is(
 const isCodexResumeCursorSchema = Schema.is(CodexResumeCursorSchema);
 
 const PROVIDER = ProviderDriverKind.make("codex");
+const CODEX_NATIVE_SESSION_PAGE_SIZE = 1_000;
 
 export interface CodexAdapterLiveOptions {
   readonly instanceId?: ProviderInstanceId;
@@ -109,6 +118,56 @@ function isoFromCodexSeconds(value: unknown, fallback: string): string {
       )
     : fallback;
 }
+
+export function normalizeCodexNativeSession(
+  thread: EffectCodexSchema.V2ThreadListResponse__Thread,
+  archived: boolean,
+): ProviderNativeSession {
+  const createdAt = isoFromCodexSeconds(thread.createdAt, "1970-01-01T00:00:00.000Z");
+  const updatedAt = isoFromCodexSeconds(thread.updatedAt, createdAt);
+  const preview = thread.preview.trim().split("\n", 1)[0]?.trim();
+  return {
+    nativeId: thread.id,
+    title: thread.name?.trim() || preview || "Codex session",
+    cwd: thread.cwd,
+    createdAt,
+    updatedAt,
+    archived,
+    resumeCursor: { threadId: thread.id },
+  };
+}
+
+const listCodexNativeSessions = Effect.fn("listCodexNativeSessions")(function* (
+  client: CodexClient.CodexAppServerClient["Service"],
+) {
+  const sessions = new Map<string, ProviderNativeSession>();
+  for (const archived of [false, true]) {
+    let cursor: string | undefined;
+    do {
+      const response = yield* client.request("thread/list", {
+        archived,
+        limit: CODEX_NATIVE_SESSION_PAGE_SIZE,
+        sortKey: "updated_at",
+        sortDirection: "desc",
+        ...(cursor ? { cursor } : {}),
+      });
+      for (const thread of response.data) {
+        if (
+          thread.ephemeral ||
+          thread.parentThreadId ||
+          (typeof thread.source === "object" && "subAgent" in thread.source)
+        ) {
+          continue;
+        }
+        sessions.set(thread.id, normalizeCodexNativeSession(thread, archived));
+      }
+      cursor = response.nextCursor ?? undefined;
+    } while (cursor);
+  }
+  return [...sessions.values()].sort((left, right) =>
+    right.updatedAt.localeCompare(left.updatedAt),
+  );
+});
 
 function codexUserMessageText(item: Record<string, unknown>): string {
   if (!Array.isArray(item.content)) return "";
@@ -1487,6 +1546,43 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
     options?.nativeEventLogger === undefined ? nativeEventLogger : undefined;
   const runtimeEventQueue = yield* Queue.unbounded<ProviderRuntimeEvent>();
   const sessions = new Map<ThreadId, CodexAdapterSessionContext>();
+  const catalogScope = yield* Scope.make("sequential");
+  yield* Effect.addFinalizer(() => Scope.close(catalogScope, Exit.void));
+  const catalogClient = yield* Effect.cached(
+    Effect.gen(function* () {
+      const resolvedHomePath = codexConfig.homePath
+        ? expandHomePath(codexConfig.homePath)
+        : undefined;
+      const environment = {
+        ...options?.environment,
+        ...(resolvedHomePath ? { CODEX_HOME: resolvedHomePath } : {}),
+      };
+      const spawnCommand = yield* resolveSpawnCommand(
+        codexConfig.binaryPath,
+        codexAppServerArgs(resolveCodexLaunchArgs(codexConfig.launchArgs, options?.environment)),
+        {
+          env: environment,
+          extendEnv: true,
+        },
+      );
+      const child = yield* childProcessSpawner.spawn(
+        ChildProcess.make(spawnCommand.command, spawnCommand.args, {
+          cwd: serverConfig.cwd,
+          env: environment,
+          extendEnv: true,
+          forceKillAfter: "2 seconds",
+          shell: spawnCommand.shell,
+        }),
+      );
+      const context = yield* Layer.build(CodexClient.layerChildProcess(child));
+      const client = yield* Effect.service(CodexClient.CodexAppServerClient).pipe(
+        Effect.provide(context),
+      );
+      yield* client.request("initialize", buildCodexInitializeParams());
+      yield* client.notify("initialized", undefined);
+      return client;
+    }).pipe(Effect.provideService(Scope.Scope, catalogScope)),
+  );
 
   const startSession: CodexAdapterShape["startSession"] = (input) =>
     Effect.scoped(
@@ -1771,6 +1867,16 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
       ),
     );
 
+  const rejectUserInput: CodexAdapterShape["rejectUserInput"] = (threadId, requestId) =>
+    requireSession(threadId).pipe(
+      Effect.flatMap((session) => session.runtime.respondToUserInput(requestId, {})),
+      Effect.mapError((cause) =>
+        cause._tag === "ProviderAdapterSessionNotFoundError"
+          ? cause
+          : mapCodexRuntimeError(threadId, "item/tool/requestUserInput", cause),
+      ),
+    );
+
   const writeNativeEvent = Effect.fnUntraced(function* (event: ProviderEvent) {
     if (!nativeEventLogger) {
       return;
@@ -1810,6 +1916,60 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
   const hasSession: CodexAdapterShape["hasSession"] = (threadId) =>
     Effect.succeed(Boolean(sessions.get(threadId) && !sessions.get(threadId)?.stopped));
 
+  const listNativeSessions: NonNullable<CodexAdapterShape["listNativeSessions"]> = () =>
+    catalogClient.pipe(
+      Effect.flatMap(listCodexNativeSessions),
+      Effect.mapError(
+        (cause) =>
+          new ProviderAdapterRequestError({
+            provider: PROVIDER,
+            method: "thread/list",
+            detail: cause instanceof Error ? cause.message : String(cause),
+            cause,
+          }),
+      ),
+    );
+
+  const readHistoryFromResume: NonNullable<CodexAdapterShape["readHistoryFromResume"]> = Effect.fn(
+    "readHistoryFromResume",
+  )(function* (input: ProviderSessionStartInput) {
+    if (!isCodexResumeCursorSchema(input.resumeCursor)) {
+      return yield* new ProviderAdapterValidationError({
+        provider: PROVIDER,
+        operation: "readHistoryFromResume",
+        issue: "A valid Codex resume cursor is required.",
+      });
+    }
+    const client = yield* catalogClient.pipe(
+      Effect.mapError(
+        (cause) =>
+          new ProviderAdapterRequestError({
+            provider: PROVIDER,
+            method: "thread/read",
+            detail: cause instanceof Error ? cause.message : String(cause),
+            cause,
+          }),
+      ),
+    );
+    const response = yield* client
+      .request("thread/read", {
+        threadId: input.resumeCursor.threadId,
+        includeTurns: true,
+      })
+      .pipe(
+        Effect.mapError(
+          (cause) =>
+            new ProviderAdapterRequestError({
+              provider: PROVIDER,
+              method: "thread/read",
+              detail: cause instanceof Error ? cause.message : String(cause),
+              cause,
+            }),
+        ),
+      );
+    return normalizeCodexThreadHistory(response.thread);
+  });
+
   const stopAll: CodexAdapterShape["stopAll"] = () =>
     Effect.forEach(Array.from(sessions.values()), stopSessionInternal, {
       concurrency: 1,
@@ -1835,9 +1995,12 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
     interruptTurn,
     readThread,
     readHistory,
+    readHistoryFromResume,
+    listNativeSessions,
     rollbackThread,
     respondToRequest,
     respondToUserInput,
+    rejectUserInput,
     stopSession,
     listSessions,
     hasSession,

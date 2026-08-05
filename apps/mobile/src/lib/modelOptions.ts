@@ -68,7 +68,7 @@ function normalizeSelectionOptions(
  * validated, so stored selections pass through untouched.
  */
 export function resolveSelectableModelSelection(
-  config: T3ServerConfig | null | undefined,
+  config: Pick<T3ServerConfig, "providers"> | null | undefined,
   selection: ModelSelection | null,
 ): ModelSelection | null {
   if (!selection || !config) {
@@ -86,7 +86,7 @@ export function resolveSelectableModelSelection(
 }
 
 export function buildModelOptions(
-  config: T3ServerConfig | null | undefined,
+  config: Pick<T3ServerConfig, "providers"> | null | undefined,
   fallbackModelSelection: ModelSelection | null,
 ): ReadonlyArray<ModelOption> {
   const options = new Map<string, ModelOption>();
@@ -185,36 +185,18 @@ export function buildModelMenuActions(
   groups: ReadonlyArray<ProviderGroup>,
   selectedModel: ModelSelection | null,
 ): MenuAction[] {
-  return groups.flatMap((group) => {
-    const currentModels = group.models.filter((model) => !model.isLegacy);
-    const legacyModels = group.models.filter((model) => model.isLegacy);
+  return groups.map((group) => {
     const selected = group.models.find(
       (model) =>
         model.selection.instanceId === selectedModel?.instanceId &&
         model.selection.model === selectedModel.model,
     );
 
-    return [
-      ...(currentModels.length > 0
-        ? [
-            {
-              id: `provider:${group.providerKey}`,
-              title: group.providerLabel,
-              subtitle: selected && !selected.isLegacy ? selected.label : undefined,
-              subactions: currentModels.map((option) => modelMenuAction(option, selectedModel)),
-            },
-          ]
-        : []),
-      ...(legacyModels.length > 0
-        ? [
-            {
-              id: `legacy-models:${group.providerKey}`,
-              title: `${group.providerLabel} legacy models`,
-              subtitle: selected?.isLegacy ? selected.label : undefined,
-              subactions: legacyModels.map((option) => modelMenuAction(option, selectedModel)),
-            },
-          ]
-        : []),
-    ];
+    return {
+      id: `provider:${group.providerKey}`,
+      title: group.providerLabel,
+      subtitle: selected?.label,
+      subactions: group.models.map((option) => modelMenuAction(option, selectedModel)),
+    };
   });
 }

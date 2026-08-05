@@ -47,6 +47,7 @@ import {
   IconLetterSpacing,
   IconLink,
   IconMessage,
+  IconMicrophoneFilled,
   IconMinus,
   IconNetwork,
   IconPalette,
@@ -75,7 +76,7 @@ import {
 import { Platform } from "react-native";
 import { SymbolView as ExpoSymbolView, type SFSymbol, type SymbolViewProps } from "expo-symbols";
 
-const ANDROID_ICON_BY_SF_SYMBOL: Partial<Record<SFSymbol, Icon>> = {
+const FALLBACK_ICON_BY_SF_SYMBOL: Partial<Record<SFSymbol, Icon>> = {
   "arrow.branch": IconGitBranch,
   "arrow.clockwise": IconRefresh,
   "arrow.down.circle": IconArrowDownCircle,
@@ -119,6 +120,7 @@ const ANDROID_ICON_BY_SF_SYMBOL: Partial<Record<SFSymbol, Icon>> = {
   "line.3.horizontal.decrease.circle": IconFilter,
   "line.3.horizontal.decrease.circle.fill": IconFilter,
   magnifyingglass: IconSearch,
+  "mic.fill": IconMicrophoneFilled,
   paintbrush: IconPalette,
   "person.crop.circle": IconUserCircle,
   play: IconPlayerPlay,
@@ -150,7 +152,7 @@ const ANDROID_ICON_BY_SF_SYMBOL: Partial<Record<SFSymbol, Icon>> = {
 // icon name (the raw expo-symbols contract). Resolve those here too so the
 // android key keeps working through this wrapper — it wins over the SF map
 // when both match (e.g. folder vs folder_open for expanded project groups).
-const ANDROID_ICON_BY_MATERIAL_NAME: Record<string, Icon> = {
+const FALLBACK_ICON_BY_MATERIAL_NAME: Record<string, Icon> = {
   auto_awesome: IconSparkles,
   bolt: IconBolt,
   build: IconTool,
@@ -177,26 +179,33 @@ export type { SFSymbol } from "expo-symbols";
 export type AppSymbolName = SymbolViewProps["name"];
 
 export function SymbolView(props: SymbolViewProps) {
-  if (Platform.OS !== "android") {
+  if (Platform.OS === "ios") {
     return <ExpoSymbolView {...props} />;
   }
 
   const materialName = typeof props.name === "string" ? undefined : props.name.android;
   const sfSymbol = typeof props.name === "string" ? props.name : props.name.ios;
-  const AndroidIcon =
-    (materialName ? ANDROID_ICON_BY_MATERIAL_NAME[materialName] : undefined) ??
-    (sfSymbol ? ANDROID_ICON_BY_SF_SYMBOL[sfSymbol] : undefined);
+  const FallbackIcon =
+    (materialName ? FALLBACK_ICON_BY_MATERIAL_NAME[materialName] : undefined) ??
+    (sfSymbol ? FALLBACK_ICON_BY_SF_SYMBOL[sfSymbol] : undefined);
 
-  if (!AndroidIcon) {
+  if (!FallbackIcon) {
     return props.fallback ?? null;
   }
 
+  const strokeWidth =
+    props.weight === "bold" || props.weight === "heavy" || props.weight === "black"
+      ? 3
+      : props.weight === "semibold"
+        ? 2.5
+        : 2;
+
   return (
-    <AndroidIcon
+    <FallbackIcon
       accessibilityLabel={props.accessibilityLabel}
       color={props.tintColor}
       size={props.size}
-      strokeWidth={2}
+      strokeWidth={strokeWidth}
       style={props.style}
       testID={props.testID}
     />

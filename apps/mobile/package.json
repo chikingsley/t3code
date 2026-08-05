@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "expo start --clear",
     "web": "APP_VARIANT=development node scripts/web-preview.mjs",
+    "web:ui-lab": "EXPO_PUBLIC_UI_LAB=1 APP_VARIANT=development node scripts/web-preview.mjs",
     "web:stack:up": "node scripts/web-preview-stack.mjs up",
     "web:stack:down": "node scripts/web-preview-stack.mjs down",
     "web:stack:status": "node scripts/web-preview-stack.mjs status",
@@ -52,7 +53,6 @@
     "@callstack/liquid-glass": "^0.7.1",
     "@clerk/expo": "catalog:",
     "@effect/atom-react": "catalog:",
-    "@expo-google-fonts/dm-sans": "^0.4.2",
     "@expo/metro-runtime": "~56.0.15",
     "@expo/ui": "~56.0.18",
     "@legendapp/list": "3.3.3",
@@ -115,6 +115,7 @@
     "react-native-gesture-handler": "~2.31.1",
     "react-native-image-viewing": "^0.2.2",
     "react-native-keyboard-controller": "1.21.13",
+    "react-native-nano-icons": "0.2.1",
     "react-native-nitro-markdown": "^0.5.0",
     "react-native-nitro-modules": "0.35.9",
     "react-native-reanimated": "4.3.1",

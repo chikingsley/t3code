@@ -23,7 +23,13 @@ import * as Queue from "effect/Queue";
 import * as Ref from "effect/Ref";
 import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
-import type { OpencodeClient, Part, PermissionRequest, QuestionRequest } from "@opencode-ai/sdk/v2";
+import type {
+  GlobalSession,
+  OpencodeClient,
+  Part,
+  PermissionRequest,
+  QuestionRequest,
+} from "@opencode-ai/sdk/v2";
 import { getModelSelectionStringOptionValue } from "@t3tools/shared/model";
 
 import { resolveAttachmentPath } from "../../attachmentStore.ts";
@@ -41,6 +47,7 @@ import { type OpenCodeAdapterShape } from "../Services/OpenCodeAdapter.ts";
 import type {
   ProviderHistoryActivity,
   ProviderHistoryMessage,
+  ProviderNativeSession,
   ProviderThreadHistory,
 } from "../Services/ProviderAdapter.ts";
 import {
@@ -66,6 +73,68 @@ const PROVIDER = ProviderDriverKind.make("opencode");
  * rather than misread (mirrors GROK_RESUME_VERSION / CURSOR_RESUME_VERSION).
  */
 const OPENCODE_RESUME_VERSION = 1 as const;
+const NATIVE_SESSION_PAGE_SIZE = 1_000;
+
+function openCodeTimestamp(value: number): string {
+  return DateTime.make(value).pipe(
+    Option.map(DateTime.formatIso),
+    Option.getOrElse(() => "1970-01-01T00:00:00.000Z"),
+  );
+}
+
+export function normalizeOpenCodeNativeSession(session: GlobalSession): ProviderNativeSession {
+  return {
+    nativeId: session.id,
+    title: session.title.trim() || "OpenCode session",
+    cwd: session.directory,
+    createdAt: openCodeTimestamp(session.time.created),
+    updatedAt: openCodeTimestamp(session.time.updated),
+    archived: session.time.archived !== undefined,
+    resumeCursor: {
+      schemaVersion: OPENCODE_RESUME_VERSION,
+      sessionId: session.id,
+    },
+    ...(session.model ? { model: `${session.model.providerID}/${session.model.id}` } : {}),
+  };
+}
+
+export const listOpenCodeNativeSessions = Effect.fn("listOpenCodeNativeSessions")(function* (
+  client: OpencodeClient,
+) {
+  const sessions = new Map<string, ProviderNativeSession>();
+  // OpenCode treats `archived: true` as "include archived". Each returned
+  // session still carries its own archive timestamp, which we preserve below.
+  for (const archived of [true]) {
+    let cursor: number | undefined;
+    for (;;) {
+      const response = yield* runOpenCodeSdk("experimental.session.list", () =>
+        client.experimental.session.list({
+          roots: true,
+          archived,
+          limit: NATIVE_SESSION_PAGE_SIZE,
+          ...(cursor !== undefined ? { cursor } : {}),
+        }),
+      );
+      const page = response.data ?? [];
+      for (const session of page) {
+        if (session.parentID || sessions.has(session.id)) continue;
+        sessions.set(session.id, normalizeOpenCodeNativeSession(session));
+      }
+      const nextCursor = page.at(-1)?.time.updated;
+      if (
+        page.length < NATIVE_SESSION_PAGE_SIZE ||
+        nextCursor === undefined ||
+        nextCursor === cursor
+      ) {
+        break;
+      }
+      cursor = nextCursor;
+    }
+  }
+  return [...sessions.values()].sort((left, right) =>
+    right.updatedAt.localeCompare(left.updatedAt),
+  );
+});
 
 /**
  * Decode a persisted resume cursor into the upstream `ses_…` id. Anything
@@ -690,6 +759,24 @@ export function makeOpenCodeAdapter(
       options?.nativeEventLogger === undefined ? nativeEventLogger : undefined;
     const runtimeEvents = yield* Queue.unbounded<ProviderRuntimeEvent>();
     const sessions = new Map<ThreadId, OpenCodeSessionContext>();
+    const catalogScope = yield* Scope.make("sequential");
+    yield* Effect.addFinalizer(() => Scope.close(catalogScope, Exit.void));
+    const catalogConnection = yield* Effect.cached(
+      Effect.gen(function* () {
+        const server = yield* openCodeRuntime.connectToOpenCodeServer({
+          binaryPath: openCodeSettings.binaryPath,
+          serverUrl: openCodeSettings.serverUrl,
+          ...(options?.environment ? { environment: options.environment } : {}),
+        });
+        const client = openCodeRuntime.createOpenCodeSdkClient({
+          baseUrl: server.url,
+          ...(server.external && openCodeSettings.serverPassword
+            ? { serverPassword: openCodeSettings.serverPassword }
+            : {}),
+        });
+        return { client, server };
+      }).pipe(Effect.provideService(Scope.Scope, catalogScope)),
+    );
     const randomUUIDv4 = crypto.randomUUIDv4.pipe(
       Effect.mapError(
         (cause) =>
@@ -1703,6 +1790,22 @@ export function makeOpenCodeAdapter(
       ).pipe(Effect.mapError(toRequestError));
     });
 
+    const rejectUserInput: OpenCodeAdapterShape["rejectUserInput"] = Effect.fn("rejectUserInput")(
+      function* (threadId, requestId) {
+        const context = yield* ensureSessionContext(sessions, threadId);
+        if (!context.pendingQuestions.has(requestId)) {
+          return yield* new ProviderAdapterRequestError({
+            provider: PROVIDER,
+            method: "question.reject",
+            detail: `Unknown pending user-input request: ${requestId}`,
+          });
+        }
+        yield* runOpenCodeSdk("question.reject", () =>
+          context.client.question.reject({ requestID: requestId }),
+        ).pipe(Effect.mapError(toRequestError));
+      },
+    );
+
     const stopSession: OpenCodeAdapterShape["stopSession"] = Effect.fn("stopSession")(
       function* (threadId) {
         const context = sessions.get(threadId);
@@ -1779,29 +1882,33 @@ export function makeOpenCodeAdapter(
             issue: "A valid OpenCode resume cursor is required.",
           });
         }
-        return yield* Effect.scoped(
-          Effect.gen(function* () {
-            const server = yield* openCodeRuntime
-              .connectToOpenCodeServer({
-                binaryPath: openCodeSettings.binaryPath,
-                serverUrl: openCodeSettings.serverUrl,
-                ...(options?.environment ? { environment: options.environment } : {}),
-              })
-              .pipe(Effect.mapError((cause) => toProcessError(input.threadId, cause)));
-            const client = openCodeRuntime.createOpenCodeSdkClient({
-              baseUrl: server.url,
-              directory: input.cwd ?? serverConfig.cwd,
-              ...(server.external && openCodeSettings.serverPassword
-                ? { serverPassword: openCodeSettings.serverPassword }
-                : {}),
-            });
-            const messages = yield* runOpenCodeSdk("session.messages", () =>
-              client.session.messages({ sessionID: sessionId }),
-            ).pipe(Effect.mapError(toRequestError));
-            return normalizeOpenCodeThreadHistory(messages.data ?? []);
-          }),
+        const { client } = yield* catalogConnection.pipe(
+          Effect.mapError((cause) => toProcessError(input.threadId, cause)),
         );
+        const messages = yield* runOpenCodeSdk("session.messages", () =>
+          client.session.messages({
+            sessionID: sessionId,
+            ...(input.cwd ? { directory: input.cwd } : {}),
+          }),
+        ).pipe(Effect.mapError(toRequestError));
+        return normalizeOpenCodeThreadHistory(messages.data ?? []);
       });
+
+    const listNativeSessions: NonNullable<OpenCodeAdapterShape["listNativeSessions"]> = () =>
+      catalogConnection.pipe(
+        Effect.mapError(
+          (cause) =>
+            new ProviderAdapterProcessError({
+              provider: PROVIDER,
+              threadId: ThreadId.make("native-session-catalog"),
+              detail: cause.message,
+              cause,
+            }),
+        ),
+        Effect.flatMap(({ client }) =>
+          listOpenCodeNativeSessions(client).pipe(Effect.mapError(toRequestError)),
+        ),
+      );
 
     const rollbackThread: OpenCodeAdapterShape["rollbackThread"] = Effect.fn("rollbackThread")(
       function* (threadId, numTurns) {
@@ -1854,12 +1961,14 @@ export function makeOpenCodeAdapter(
       interruptTurn,
       respondToRequest,
       respondToUserInput,
+      rejectUserInput,
       stopSession,
       listSessions,
       hasSession,
       readThread,
       readHistory,
       readHistoryFromResume,
+      listNativeSessions,
       rollbackThread,
       stopAll,
       get streamEvents() {

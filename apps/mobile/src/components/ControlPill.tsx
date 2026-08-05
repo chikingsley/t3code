@@ -9,11 +9,13 @@ import {
 } from "react";
 import { Platform, Pressable, useColorScheme, View } from "react-native";
 import { useThemeColor } from "../lib/useThemeColor";
+import { UI_CONTROL } from "../lib/ui-metrics";
 
 import { cn } from "../lib/cn";
 import { AndroidAnchoredMenu } from "./AndroidAnchoredMenu";
 import { SymbolView } from "./AppSymbol";
 import { AppText as Text } from "./AppText";
+import { WebAnchoredMenu } from "./WebAnchoredMenu";
 
 export function ControlPill(props: {
   readonly icon?: ComponentProps<typeof SymbolView>["name"];
@@ -21,7 +23,7 @@ export function ControlPill(props: {
   readonly label?: string;
   readonly accessibilityLabel?: string;
   readonly onPress?: () => void;
-  readonly variant?: "circle" | "pill" | "primary" | "danger";
+  readonly variant?: "bare" | "circle" | "pill" | "primary" | "danger";
   readonly disabled?: boolean;
 }) {
   const variant = props.variant ?? "circle";
@@ -40,20 +42,25 @@ export function ControlPill(props: {
         : iconColor;
 
   const isCircle =
-    variant === "circle" || variant === "danger" || (variant === "primary" && !props.label);
+    variant === "bare" ||
+    variant === "circle" ||
+    variant === "danger" ||
+    (variant === "primary" && !props.label);
   const containerClassName = cn(
     isCircle
-      ? "h-11 w-11 items-center justify-center rounded-full"
+      ? "h-ui-control w-ui-control items-center justify-center rounded-full"
       : variant === "primary"
-        ? "h-11 flex-row items-center justify-center gap-2 rounded-full px-5"
-        : "h-11 flex-row items-center justify-center gap-2 rounded-full px-3.5",
-    variant === "primary"
-      ? props.disabled
-        ? "bg-subtle-strong"
-        : "bg-primary"
-      : variant === "danger"
-        ? "bg-danger"
-        : "bg-subtle",
+        ? "h-ui-control flex-row items-center justify-center gap-2 rounded-full px-4"
+        : "h-ui-control flex-row items-center justify-center gap-2 rounded-full px-3",
+    variant === "bare"
+      ? "bg-transparent"
+      : variant === "primary"
+        ? props.disabled
+          ? "bg-subtle-strong"
+          : "bg-primary"
+        : variant === "danger"
+          ? "bg-danger"
+          : "bg-subtle",
   );
   const labelClassName = cn(
     "text-center text-xs font-t3-bold",
@@ -73,9 +80,15 @@ export function ControlPill(props: {
       className={containerClassName}
     >
       {props.iconNode ? (
-        <View className="h-4 w-4 items-center justify-center">{props.iconNode}</View>
+        <View className="h-ui-icon w-ui-icon items-center justify-center">{props.iconNode}</View>
       ) : props.icon ? (
-        <SymbolView name={props.icon} size={16} tintColor={iconTintColor} type="monochrome" />
+        <SymbolView
+          name={props.icon}
+          size={UI_CONTROL.icon}
+          tintColor={iconTintColor}
+          type="monochrome"
+          weight={props.icon === "arrow.up" ? "bold" : undefined}
+        />
       ) : null}
       {props.label ? <Text className={labelClassName}>{props.label}</Text> : null}
     </Pressable>
@@ -93,6 +106,21 @@ export function ControlPillMenu(
   },
 ) {
   const isDarkMode = useColorScheme() === "dark";
+
+  if (Platform.OS === "web" && isValidElement(props.children)) {
+    const child = props.children as ReactElement<{ onPress?: () => void }>;
+    return (
+      <WebAnchoredMenu
+        actions={props.actions}
+        className={props.className}
+        title={props.title}
+        style={props.style}
+        onPressAction={props.onPressAction}
+      >
+        {(open) => cloneElement(child, { onPress: open })}
+      </WebAnchoredMenu>
+    );
+  }
 
   if (Platform.OS === "android") {
     // Long-press menus keep their child interactive: the child element gets

@@ -162,6 +162,26 @@ function readPersistedCwd(
   return trimmed.length > 0 ? trimmed : undefined;
 }
 
+function readRuntimePayloadString(runtimePayload: unknown, key: string): string | undefined {
+  if (!runtimePayload || typeof runtimePayload !== "object" || Array.isArray(runtimePayload)) {
+    return undefined;
+  }
+  const value = (runtimePayload as Record<string, unknown>)[key];
+  return typeof value === "string" ? value : undefined;
+}
+
+function readResumeNativeId(resumeCursor: unknown): string | undefined {
+  if (!resumeCursor || typeof resumeCursor !== "object" || Array.isArray(resumeCursor)) {
+    return undefined;
+  }
+  const record = resumeCursor as Record<string, unknown>;
+  for (const key of ["threadId", "sessionId", "resume"] as const) {
+    const value = record[key];
+    if (typeof value === "string" && value.trim().length > 0) return value.trim();
+  }
+  return undefined;
+}
+
 const dieOnMissingBindingInstanceId = (
   operation: string,
   payload: {
@@ -820,7 +840,11 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
         "provider.thread_id": input.threadId,
         "provider.request_id": input.requestId,
       });
-      yield* routed.adapter.respondToUserInput(routed.threadId, input.requestId, input.answers);
+      if (input.rejected && routed.adapter.rejectUserInput) {
+        yield* routed.adapter.rejectUserInput(routed.threadId, input.requestId);
+      } else {
+        yield* routed.adapter.respondToUserInput(routed.threadId, input.requestId, input.answers);
+      }
     }).pipe(
       withMetrics({
         counter: providerTurnsTotal,
@@ -973,6 +997,55 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
   const getInstanceInfo: ProviderServiceMethod<"getInstanceInfo"> = (instanceId) =>
     registry.getInstanceInfo(instanceId);
 
+  const listNativeSessions: NonNullable<
+    ProviderService.ProviderServiceShape["listNativeSessions"]
+  > = () =>
+    Effect.gen(function* () {
+      const entries = yield* getAdapterEntries;
+      const catalogs = yield* Effect.forEach(
+        entries,
+        ([providerInstanceId, adapter]) =>
+          adapter.listNativeSessions
+            ? adapter.listNativeSessions().pipe(
+                Effect.tap((sessions) =>
+                  Effect.logInfo("provider native session catalog listed", {
+                    provider: adapter.provider,
+                    providerInstanceId,
+                    sessionCount: sessions.length,
+                  }),
+                ),
+                Effect.map((sessions) =>
+                  sessions.map((session) => ({
+                    ...session,
+                    provider: adapter.provider,
+                    providerInstanceId,
+                  })),
+                ),
+              )
+            : Effect.succeed([]),
+        { concurrency: 1 },
+      );
+      return catalogs.flat().sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
+    });
+
+  const adoptNativeSessionBinding: NonNullable<
+    ProviderService.ProviderServiceShape["adoptNativeSessionBinding"]
+  > = (input) =>
+    directory.upsert({
+      threadId: input.threadId,
+      provider: input.provider,
+      providerInstanceId: input.providerInstanceId,
+      runtimeMode: "full-access",
+      status: "stopped",
+      resumeCursor: input.resumeCursor,
+      runtimePayload: {
+        cwd: input.cwd,
+        model: input.modelSelection.model,
+        modelSelection: input.modelSelection,
+        nativeUpdatedAt: input.nativeUpdatedAt,
+      },
+    });
+
   const readHistory: ProviderServiceMethod<"readHistory"> = Effect.fn("readHistory")(
     function* (threadId) {
       const bindingOption = yield* directory.getBinding(threadId);
@@ -1019,12 +1092,39 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
   > = () =>
     directory.listBindings().pipe(
       Effect.map((bindings) =>
-        bindings.map((binding) => ({
-          threadId: binding.threadId,
-          provider: binding.provider,
-        })),
+        bindings.map((binding) => {
+          const nativeId = readResumeNativeId(binding.resumeCursor);
+          const nativeUpdatedAt = readRuntimePayloadString(
+            binding.runtimePayload,
+            "nativeUpdatedAt",
+          );
+          const historySyncedAt = readRuntimePayloadString(
+            binding.runtimePayload,
+            "historySyncedAt",
+          );
+          return {
+            threadId: binding.threadId,
+            provider: binding.provider,
+            ...(binding.providerInstanceId
+              ? { providerInstanceId: binding.providerInstanceId }
+              : {}),
+            ...(nativeId ? { nativeId } : {}),
+            ...(nativeUpdatedAt ? { nativeUpdatedAt } : {}),
+            ...(historySyncedAt ? { historySyncedAt } : {}),
+          };
+        }),
       ),
     );
+
+  const markHistorySynced: NonNullable<ProviderService.ProviderServiceShape["markHistorySynced"]> =
+    Effect.fn("markHistorySynced")(function* (threadId, nativeUpdatedAt) {
+      const binding = yield* directory.getBinding(threadId).pipe(Effect.map(Option.getOrUndefined));
+      if (!binding?.providerInstanceId) return;
+      yield* directory.upsert({
+        ...binding,
+        runtimePayload: { historySyncedAt: nativeUpdatedAt },
+      });
+    });
 
   const rollbackConversation: ProviderServiceMethod<"rollbackConversation"> = Effect.fn(
     "rollbackConversation",
@@ -1135,10 +1235,13 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
     respondToUserInput,
     stopSession,
     listSessions,
+    listNativeSessions,
+    adoptNativeSessionBinding,
     getCapabilities,
     getInstanceInfo,
     readHistory,
     listHistoryBindings,
+    markHistorySynced,
     rollbackConversation,
     // Each access creates a fresh PubSub subscription so that multiple
     // consumers (ProviderRuntimeIngestion, CheckpointReactor, etc.) each

@@ -142,7 +142,7 @@ export interface OpenCodeRuntimeShape {
   }) => Effect.Effect<OpenCodeCommandResult, OpenCodeRuntimeError>;
   readonly createOpenCodeSdkClient: (input: {
     readonly baseUrl: string;
-    readonly directory: string;
+    readonly directory?: string;
     readonly serverPassword?: string;
   }) => OpencodeClient;
   readonly loadOpenCodeInventory: (
@@ -617,7 +617,7 @@ const makeOpenCodeRuntime = Effect.gen(function* () {
   const createOpenCodeSdkClient: OpenCodeRuntimeShape["createOpenCodeSdkClient"] = (input) =>
     createOpencodeClient({
       baseUrl: input.baseUrl,
-      directory: input.directory,
+      ...(input.directory ? { directory: input.directory } : {}),
       ...(input.serverPassword
         ? {
             headers: {
