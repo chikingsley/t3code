@@ -100,7 +100,7 @@ export function buildComposerConfigurationMenuActions(input: {
   readonly runtimeMode: RuntimeMode;
   readonly interactionMode: ProviderInteractionMode;
   readonly showInteractionModeToggle: boolean;
-}): ReadonlyArray<MenuAction> {
+}): MenuAction[] {
   return [
     ...buildProviderOptionMenuActions(input.descriptors),
     {

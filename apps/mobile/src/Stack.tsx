@@ -5,6 +5,7 @@ import {
   StackActions,
   useNavigation,
 } from "@react-navigation/native";
+import type { PrivateValueStore } from "@react-navigation/core";
 import {
   createNativeStackNavigator,
   createNativeStackScreen,
@@ -566,12 +567,15 @@ export const RootStack = createNativeStackNavigator({
     }),
   },
 });
-type RootStackType = typeof RootStack;
+type RootStackParamList =
+  typeof RootStack extends PrivateValueStore<infer Value> ? Value[0] : never;
 
 const navigationPathConfig = {
   screens: createPathConfigForStaticNavigation(RootStack) ?? {},
 };
 
-declare module "@react-navigation/native" {
-  interface RootNavigator extends RootStackType {}
+declare global {
+  namespace ReactNavigation {
+    interface RootParamList extends RootStackParamList {}
+  }
 }

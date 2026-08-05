@@ -15,6 +15,7 @@ import { UI_SPACE } from "../lib/ui-metrics";
 
 const COMPOSER_TRANSITION_DURATION = 180;
 const COMPOSER_TRANSITION_EASING = Easing.bezier(0.22, 1, 0.36, 1);
+const AnimatedLiquidGlassView = Animated.createAnimatedComponent(LiquidGlassView);
 
 export const COMPOSER_LAYOUT_TRANSITION =
   Platform.OS === "android"
@@ -95,14 +96,14 @@ export function ComposerSurface(props: {
   if (isLiquidGlassSupported) {
     return (
       <Animated.View layout={COMPOSER_LAYOUT_TRANSITION} style={shadowStyle}>
-        <LiquidGlassView
+        <AnimatedLiquidGlassView
           effect="regular"
           interactive
           colorScheme={props.isDarkMode ? "dark" : "light"}
           style={[props.style, animatedSurfaceStyle]}
         >
           {props.children}
-        </LiquidGlassView>
+        </AnimatedLiquidGlassView>
       </Animated.View>
     );
   }
