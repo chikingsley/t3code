@@ -51,6 +51,19 @@ const providerTurnKey = (threadId: ThreadId, turnId: TurnId) => `${threadId}:${t
 const providerTaskKey = (threadId: ThreadId, taskId: string) => `${threadId}:${taskId}`;
 const nowIso = Effect.map(DateTime.now, DateTime.formatIso);
 
+export function prioritizeHistoryBindings<
+  T extends { readonly nativeUpdatedAt?: string; readonly historySyncedAt?: string },
+>(bindings: ReadonlyArray<T>): Array<T> {
+  return [...bindings].sort((left, right) => {
+    const leftPending =
+      left.nativeUpdatedAt === undefined || left.nativeUpdatedAt !== left.historySyncedAt;
+    const rightPending =
+      right.nativeUpdatedAt === undefined || right.nativeUpdatedAt !== right.historySyncedAt;
+    if (leftPending !== rightPending) return leftPending ? -1 : 1;
+    return (right.nativeUpdatedAt ?? "").localeCompare(left.nativeUpdatedAt ?? "");
+  });
+}
+
 // Fallback when the in-memory description cache no longer has the task name
 // (server restart, session-exit sweep, TTL/capacity eviction): earlier
 // task.started/task.progress activities for the task are persisted with it.
@@ -874,7 +887,7 @@ const make = Effect.gen(function* () {
 
   const reconcileProviderHistory = Effect.fn("reconcileProviderHistory")(function* () {
     if (!providerService.readHistory || !providerService.listHistoryBindings) return;
-    const bindings = yield* providerService.listHistoryBindings();
+    const bindings = prioritizeHistoryBindings(yield* providerService.listHistoryBindings());
     const seen = new Set<string>();
     yield* Effect.forEach(
       bindings,
