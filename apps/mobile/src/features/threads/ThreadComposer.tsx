@@ -53,6 +53,8 @@ import {
 } from "../../components/ComposerToolbarTrigger";
 import { ControlPill } from "../../components/ControlPill";
 import { ProviderIcon } from "../../components/ProviderIcon";
+import { appendComposerDraftText } from "../../state/use-composer-drafts";
+import { DictationButton } from "../voice/DictationButton";
 import type { DraftComposerImageAttachment } from "../../lib/composerImages";
 import { buildModelOptions, groupByProvider } from "../../lib/modelOptions";
 import { useScaledTextRole } from "../settings/appearance/useScaledTextRole";
@@ -547,6 +549,14 @@ export const ThreadComposer = memo(function ThreadComposer(props: ThreadComposer
     props.selectedThread.id,
     props.selectedThread.title,
   ]);
+  const handleCommitDictation = useCallback(
+    (text: string) => {
+      const threadKey = scopedThreadKey(props.environmentId, props.selectedThread.id);
+      const separator = draftMessage.length > 0 && !draftMessage.endsWith("\n") ? "\n\n" : "";
+      appendComposerDraftText(threadKey, `${separator}${text}`);
+    },
+    [draftMessage, props.environmentId, props.selectedThread.id],
+  );
   const handleCommandSelect = useCallback(
     (item: ComposerCommandItem) => {
       if (!composerTrigger) return;
@@ -763,18 +773,21 @@ export const ThreadComposer = memo(function ThreadComposer(props: ThreadComposer
             </View>
           ) : null}
           {!isExpanded ? (
-            <Animated.View entering={FadeIn.duration(180)} exiting={FadeOut.duration(100)}>
-              {showStopAction ? (
-                <ControlPill icon="stop.fill" variant="danger" onPress={props.onStopThread} />
-              ) : (
-                <ControlPill
-                  icon="arrow.up"
-                  variant="primary"
-                  disabled={!canSend}
-                  onPress={handleSend}
-                />
-              )}
-            </Animated.View>
+            <>
+              <DictationButton variant="pill" onCommit={handleCommitDictation} />
+              <Animated.View entering={FadeIn.duration(180)} exiting={FadeOut.duration(100)}>
+                {showStopAction ? (
+                  <ControlPill icon="stop.fill" variant="danger" onPress={props.onStopThread} />
+                ) : (
+                  <ControlPill
+                    icon="arrow.up"
+                    variant="primary"
+                    disabled={!canSend}
+                    onPress={handleSend}
+                  />
+                )}
+              </Animated.View>
+            </>
           ) : null}
         </ComposerSurface>
 
@@ -811,6 +824,7 @@ export const ThreadComposer = memo(function ThreadComposer(props: ThreadComposer
                   />
                 ) : null}
               </ComposerToolbarScroller>
+              <DictationButton variant="toolbar" onCommit={handleCommitDictation} />
               <ComposerToolbarButton
                 accessibilityLabel={sendLabel}
                 icon="arrow.up"

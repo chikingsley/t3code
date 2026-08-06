@@ -27,6 +27,7 @@ import { ProviderIcon } from "../../components/ProviderIcon";
 import { ComposerSurface } from "./ThreadComposer";
 import { ThreadSettingsSheet, threadSettingsSummaryLabel } from "./ThreadSettingsSheet";
 import { useThreadSettingsSheetPresentation } from "./use-thread-settings-sheet-presentation";
+import { DictationButton } from "../voice/DictationButton";
 
 import { makeTurnCommandMetadata } from "../../lib/commandMetadata";
 import { convertPastedImagesToAttachments, pickComposerImages } from "../../lib/composerImages";
@@ -118,6 +119,13 @@ export function NewTaskDraftScreen(props: {
   const latestIncomingShareIdRef = useRef(props.incomingShareId);
   latestDraftKeyRef.current = flow.draftKey;
   latestIncomingShareIdRef.current = props.incomingShareId;
+  const handleCommitDictation = useCallback(
+    (text: string) => {
+      const separator = flow.prompt.length > 0 && !flow.prompt.endsWith("\n") ? "\n\n" : "";
+      flow.setPrompt(`${flow.prompt}${separator}${text}`);
+    },
+    [flow.prompt, flow.setPrompt],
+  );
   const isImportingShare = importingShareKey !== null;
   const alertedUnavailableIncomingShareIdRef = useRef<string | null>(null);
   const incomingShare = props.incomingShareId ? getShare(props.incomingShareId) : null;
@@ -1035,12 +1043,15 @@ export function NewTaskDraftScreen(props: {
               ) : null}
               <View className={isExpanded ? undefined : "min-w-0 flex-1"}>{promptEditor}</View>
               {!isExpanded ? (
-                <ControlPill
-                  icon="arrow.up"
-                  variant="primary"
-                  disabled={!canStart}
-                  onPress={() => void handleStart()}
-                />
+                <>
+                  <DictationButton variant="pill" onCommit={handleCommitDictation} />
+                  <ControlPill
+                    icon="arrow.up"
+                    variant="primary"
+                    disabled={!canStart}
+                    onPress={() => void handleStart()}
+                  />
+                </>
               ) : null}
             </ComposerSurface>
 
@@ -1052,6 +1063,7 @@ export function NewTaskDraftScreen(props: {
                 >
                   {toolbarPills}
                 </ComposerToolbarScroller>
+                <DictationButton variant="toolbar" onCommit={handleCommitDictation} />
                 {startButton}
               </ComposerToolbarRow>
             ) : null}
@@ -1087,6 +1099,7 @@ export function NewTaskDraftScreen(props: {
             >
               {toolbarPills}
             </ComposerToolbarScroller>
+            <DictationButton variant="toolbar" onCommit={handleCommitDictation} />
             {startButton}
           </ComposerToolbarRow>
         </View>
