@@ -26,7 +26,7 @@ export function WorkspaceConnectionStatus(props: {
       onPress={props.onPress}
       className={
         variant === "sidebar"
-          ? "mx-3 flex-row items-center gap-2 rounded-xl bg-subtle px-3 py-2.5"
+          ? "flex-row items-center gap-2 rounded-xl bg-subtle px-3 py-2.5"
           : "flex-row items-center gap-2 rounded-full bg-card px-4 py-2.5"
       }
       style={

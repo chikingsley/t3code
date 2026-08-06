@@ -391,7 +391,7 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
   const screenColor = useThemeColor("--color-screen");
   const drawerColor = useThemeColor("--color-drawer");
   const pressedBackgroundColor = useThemeColor("--color-subtle");
-  const selectedBackgroundColor = useThemeColor("--color-user-bubble");
+  const selectedBackgroundColor = useThemeColor("--color-selection");
   const pinTintColor = useThemeColor("--color-foreground-muted");
   const sidebarPane = props.pane === "sidebar";
   const selected = props.selected === true;
@@ -573,8 +573,8 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
       ? `Opens the thread. Swipe left to ${primaryAction.label.toLowerCase()}.`
       : `Opens the thread. Swipe left for ${primaryAction.label.toLowerCase()} and snooze actions.`;
 
-  // The sidebar pane fills selected rows with the accent color (matching the
-  // v1 sidebar), so every piece of row text needs a white-on-accent variant.
+  // Sidebar selection uses a navigation-specific neutral surface. Message
+  // bubble colors remain independent from navigation state.
   const cardContent = (
     <>
       <View className="flex-row items-center gap-1.5">
@@ -589,7 +589,7 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
         <Text
           className={cn(
             "flex-1 text-sm font-t3-medium",
-            selected ? "text-user-bubble-foreground-muted" : "text-foreground-muted",
+            selected ? "text-selection-foreground-muted" : "text-foreground-muted",
           )}
           numberOfLines={1}
         >
@@ -601,7 +601,9 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
         <Text
           className={cn(
             "text-xs tabular-nums",
-            selected ? "text-white" : (statusLabel?.className ?? "text-foreground-tertiary"),
+            selected
+              ? "text-selection-foreground-muted"
+              : (statusLabel?.className ?? "text-foreground-tertiary"),
           )}
         >
           {statusLabel?.label ?? timeLabel}
@@ -610,7 +612,7 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
       <Text
         className={cn(
           "mt-1 text-base font-t3-medium",
-          selected ? "text-user-bubble-foreground" : "text-foreground",
+          selected ? "text-selection-foreground" : "text-foreground",
         )}
         numberOfLines={2}
       >
@@ -630,9 +632,7 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
           <Text
             className={cn(
               "flex-1 text-xs",
-              selected
-                ? "text-user-bubble-foreground-muted"
-                : "text-red-600/80 dark:text-red-400/80",
+              selected ? "text-selection-foreground-muted" : "text-red-600/80 dark:text-red-400/80",
             )}
             numberOfLines={1}
           >
@@ -645,7 +645,7 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
           <Text
             className={cn(
               "flex-1 text-xs",
-              selected ? "text-user-bubble-foreground-muted" : "text-foreground-muted",
+              selected ? "text-selection-foreground-muted" : "text-foreground-muted",
             )}
             numberOfLines={1}
           >
@@ -653,7 +653,7 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
               <Text
                 className={cn(
                   "text-xs",
-                  selected ? "text-user-bubble-foreground-muted" : "text-foreground-muted",
+                  selected ? "text-selection-foreground-muted" : "text-foreground-muted",
                 )}
                 style={{ fontFamily: MONO_FONT }}
               >
@@ -665,7 +665,7 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
               <Text
                 className={cn(
                   "text-xs",
-                  selected ? "text-user-bubble-foreground-muted" : "text-foreground-tertiary",
+                  selected ? "text-selection-foreground-muted" : "text-foreground-tertiary",
                 )}
               >
                 {props.environmentLabel}
@@ -678,7 +678,7 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
         {pr ? (
           <Text
             accessibilityLabel={pr.accessibilityLabel}
-            className={cn("text-xs", selected ? "text-white" : pr.textClassName)}
+            className={cn("text-xs", selected ? "text-selection-foreground" : pr.textClassName)}
             style={{ fontFamily: MONO_FONT }}
           >
             #{pr.label}
@@ -777,7 +777,7 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
             <Text
               className={cn(
                 "text-base",
-                selected ? "text-user-bubble-foreground" : "text-foreground-muted",
+                selected ? "text-selection-foreground" : "text-foreground-muted",
               )}
               numberOfLines={1}
             >
@@ -795,7 +795,7 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
             className={cn(
               "text-sm tabular-nums",
               selected
-                ? "text-user-bubble-foreground-muted"
+                ? "text-selection-foreground-muted"
                 : snoozedRow
                   ? "text-blue-600 dark:text-blue-400"
                   : "text-foreground-tertiary",

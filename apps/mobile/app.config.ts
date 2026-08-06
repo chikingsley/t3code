@@ -12,6 +12,8 @@ const APP_VARIANT = resolveAppVariant(repoEnv.APP_VARIANT);
 const isIosPersonalTeamBuild = repoEnv.T3CODE_IOS_PERSONAL_TEAM === "1";
 const isMobileWebPreview = repoEnv.T3CODE_MOBILE_WEB_PREVIEW === "1";
 const isMobileWebAuthEnabled = repoEnv.T3CODE_MOBILE_WEB_AUTH === "1";
+const easProjectId =
+  repoEnv.EXPO_PUBLIC_EAS_PROJECT_ID?.trim() || "667ec179-14dc-4398-bd9d-7673bc0d6fea";
 
 const personalTeamBundleIdentifier = repoEnv.T3CODE_IOS_PERSONAL_TEAM_BUNDLE_ID?.trim();
 const IOS_BUNDLE_IDENTIFIER_PATTERN = /^[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+$/;
@@ -159,18 +161,16 @@ const config: ExpoConfig = {
   scheme: variant.scheme,
   version: "1.0.1",
   runtimeVersion: {
-    // Fingerprint (not appVersion) so an OTA only reaches binaries whose native
-    // project — native deps, config plugins, AND patches/ — matches the update.
-    // With appVersion, every 0.1.0 build shares a runtime version, so a JS update
-    // could land on a binary missing the native changes it needs and crash.
-    policy: process.env.MOBILE_VERSION_POLICY ?? "fingerprint",
+    // Expo recommends appVersion for EAS Update compatibility. Native changes
+    // ship with an app-version bump so updates target the matching binary.
+    policy: process.env.MOBILE_VERSION_POLICY ?? "appVersion",
   },
   orientation: "portrait",
   icon: variant.assets.appIcon,
   userInterfaceStyle: "automatic",
   updates: {
     enabled: true,
-    url: "https://u.expo.dev/d763fcb8-d37c-41ea-a773-b54a0ab4a454",
+    url: `https://u.expo.dev/${easProjectId}`,
     checkAutomatically: "ON_LOAD",
     fallbackToCacheTimeout: 0,
   },
@@ -323,6 +323,9 @@ const config: ExpoConfig = {
   extra: {
     appVariant: APP_VARIANT,
     iosPersonalTeamBuild: isIosPersonalTeamBuild,
+    personalEnvironment: {
+      url: repoEnv.EXPO_PUBLIC_PERSONAL_ENVIRONMENT_URL?.trim() || null,
+    },
     relay: {
       url: repoEnv.T3CODE_RELAY_URL ?? null,
     },
@@ -351,7 +354,7 @@ const config: ExpoConfig = {
       tracesToken: repoEnv.EXPO_PUBLIC_OTLP_TRACES_TOKEN ?? null,
     },
     eas: {
-      projectId: repoEnv.EXPO_PUBLIC_EAS_PROJECT_ID ?? "667ec179-14dc-4398-bd9d-7673bc0d6fea",
+      projectId: easProjectId,
     },
   },
   owner: "simonpeacocks",

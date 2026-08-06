@@ -3,6 +3,8 @@ import { relayClerkTokenOptions } from "@t3tools/shared/relayAuth";
 import { normalizeSecureRelayUrl } from "@t3tools/shared/relayUrl";
 import * as Schema from "effect/Schema";
 
+import { resolvePersonalEnvironmentUrl } from "../connection/personalEnvironment";
+
 export class CloudPublicConfigMissingError extends Schema.TaggedErrorClass<CloudPublicConfigMissingError>()(
   "CloudPublicConfigMissingError",
   {
@@ -73,8 +75,13 @@ export function resolveCloudPublicConfig(extra: ExpoExtra = Constants.expoConfig
   } satisfies CloudPublicConfig;
 }
 
-export function hasCloudPublicConfig(): boolean {
-  const config = resolveCloudPublicConfig();
+export function hasCloudPublicConfig(
+  config: CloudPublicConfig = resolveCloudPublicConfig(),
+  personalEnvironmentUrl: string | null = resolvePersonalEnvironmentUrl(),
+): boolean {
+  if (personalEnvironmentUrl) {
+    return false;
+  }
   return Boolean(config.clerk.publishableKey && config.clerk.jwtTemplate && config.relay.url);
 }
 

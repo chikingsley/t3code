@@ -182,6 +182,7 @@ export function ComposerToolbarButton(props: {
       accessibilityRole="button"
       disabled={props.disabled}
       onPress={props.onPress}
+      testID="composer-toolbar-control"
       className={cn(
         "h-ui-control flex-row items-center justify-center rounded-full active:opacity-70",
         isCircle ? "w-ui-control" : "gap-2 px-3",

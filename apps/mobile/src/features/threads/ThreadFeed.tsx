@@ -203,12 +203,6 @@ const MARKDOWN_COLORS = {
     codeText: "#262626",
     inlineCodeText: "#5f6368",
     horizontalRule: "rgba(0, 0, 0, 0.08)",
-    userBody: "#ffffff",
-    userCodeBackground: "rgba(255, 255, 255, 0.22)",
-    userCodeText: "#ffffff",
-    userInlineCodeText: "rgba(255, 255, 255, 0.82)",
-    userFenceBackground: "rgba(0, 0, 0, 0.16)",
-    userFenceText: "#ffffff",
   },
   dark: {
     body: "#e5e5e5",
@@ -220,12 +214,6 @@ const MARKDOWN_COLORS = {
     codeText: "#e5e5e5",
     inlineCodeText: "#b8bcc2",
     horizontalRule: "rgba(255, 255, 255, 0.08)",
-    userBody: "#ffffff",
-    userCodeBackground: "rgba(255, 255, 255, 0.18)",
-    userCodeText: "#ffffff",
-    userInlineCodeText: "rgba(255, 255, 255, 0.82)",
-    userFenceBackground: "rgba(0, 0, 0, 0.28)",
-    userFenceText: "#ffffff",
   },
 } as const;
 
@@ -461,7 +449,12 @@ function useMarkdownStyles(onLinkPress: (href: string) => void): MarkdownStyleSe
   const colors = MARKDOWN_COLORS[themeMode];
   const iconSubtleColor = String(useThemeColor("--color-icon-subtle"));
   const inlineSkillForeground = String(useThemeColor("--color-inline-skill-foreground"));
+  const userBubbleForeground = String(useThemeColor("--color-user-bubble-foreground"));
   const userBubbleForegroundMuted = String(useThemeColor("--color-user-bubble-foreground-muted"));
+  const userCodeBackground = String(useThemeColor("--color-md-user-code-bg"));
+  const userCodeText = String(useThemeColor("--color-md-user-code-text"));
+  const userFenceBackground = String(useThemeColor("--color-md-user-fence-bg"));
+  const userFenceText = String(useThemeColor("--color-md-user-fence-text"));
   const regularFontFamily = useFontFamily("regular");
   const boldFontFamily = useFontFamily("bold");
 
@@ -475,12 +468,12 @@ function useMarkdownStyles(onLinkPress: (href: string) => void): MarkdownStyleSe
     const markdownCodeText = colors.codeText;
     const markdownInlineCodeText = colors.inlineCodeText;
     const markdownHrColor = colors.horizontalRule;
-    const markdownUserBodyColor = colors.userBody;
-    const markdownUserCodeBg = colors.userCodeBackground;
-    const markdownUserCodeText = colors.userCodeText;
-    const markdownUserInlineCodeText = colors.userInlineCodeText;
-    const markdownUserFenceBg = colors.userFenceBackground;
-    const markdownUserFenceText = colors.userFenceText;
+    const markdownUserBodyColor = userBubbleForeground;
+    const markdownUserCodeBg = userCodeBackground;
+    const markdownUserCodeText = userCodeText;
+    const markdownUserInlineCodeText = userBubbleForegroundMuted;
+    const markdownUserFenceBg = userFenceBackground;
+    const markdownUserFenceText = userFenceText;
 
     const baseTheme: PartialMarkdownTheme = {
       colors: {
@@ -813,7 +806,12 @@ function useMarkdownStyles(onLinkPress: (href: string) => void): MarkdownStyleSe
     onLinkPress,
     regularFontFamily,
     themeMode,
+    userBubbleForeground,
     userBubbleForegroundMuted,
+    userCodeBackground,
+    userCodeText,
+    userFenceBackground,
+    userFenceText,
   ]);
 }
 

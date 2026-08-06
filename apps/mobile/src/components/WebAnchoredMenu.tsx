@@ -114,6 +114,7 @@ export function WebAnchoredMenu(props: {
                     <Pressable
                       className="px-3.5 pb-1 pt-2.5"
                       onPress={() => setPath((current) => current.slice(0, -1))}
+                      testID="web-anchored-menu-action"
                     >
                       <Text className="text-xs font-t3-bold text-foreground-muted">
                         {parent.title}
@@ -134,6 +135,7 @@ export function WebAnchoredMenu(props: {
                         key={action.id ?? `${index}-${action.title}`}
                         accessibilityRole="button"
                         disabled={disabled}
+                        testID="web-anchored-menu-action"
                         className={cn(
                           "min-h-11 flex-row items-center gap-2.5 px-3.5 py-2.5 active:bg-subtle",
                           disabled && "opacity-45",

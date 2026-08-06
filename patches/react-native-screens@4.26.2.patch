@@ -38,18 +38,15 @@ index fa1b773..270c81c 100644
          config: ScreenStackHeaderConfig,
          titleFontFamily: String?,
 diff --git a/ios/RNSBarButtonItem.h b/ios/RNSBarButtonItem.h
-index a26d125..ab41e5f 100644
+index a26d125..4ddf986 100644
 --- a/ios/RNSBarButtonItem.h
 +++ b/ios/RNSBarButtonItem.h
-@@ -17,4 +17,8 @@ typedef void (^RNSBarButtonMenuItemAction)(NSString *menuId);
-                    imageLoader:(RCTImageLoader *)imageLoader;
- #endif // defined(__cplusplus)
- 
+@@ -18,1 +18,5 @@
++
 ++ (UIMenu *)initUIMenuWithDict:(NSDictionary<NSString *, id> *)dict
 +                    menuAction:(RNSBarButtonMenuItemAction)menuAction
 +                   imageLoader:(RCTImageLoader *)imageLoader;
-+
- @end
+ #endif // defined(__cplusplus)
 diff --git a/ios/RNSBarButtonItem.mm b/ios/RNSBarButtonItem.mm
 index 0eb1f09..73298f1 100644
 --- a/ios/RNSBarButtonItem.mm

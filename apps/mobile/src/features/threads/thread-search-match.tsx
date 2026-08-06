@@ -55,7 +55,7 @@ export function ThreadSearchMatchExcerpt(props: {
     <Text
       className={cn(
         props.compact ? "text-sm" : "text-xs",
-        props.selected ? "text-user-bubble-foreground-muted" : "text-foreground-muted",
+        props.selected ? "text-selection-foreground-muted" : "text-foreground-muted",
       )}
       numberOfLines={1}
     >
@@ -63,7 +63,7 @@ export function ThreadSearchMatchExcerpt(props: {
         className={cn(
           props.compact ? "text-sm font-t3-medium" : "text-xs font-t3-medium",
           props.selected
-            ? "text-user-bubble-foreground"
+            ? "text-selection-foreground"
             : isUser
               ? "text-blue-500 dark:text-blue-400"
               : "text-emerald-600 dark:text-emerald-400",
@@ -77,7 +77,7 @@ export function ThreadSearchMatchExcerpt(props: {
             props.compact ? "text-sm" : "text-xs",
             part.highlighted && "font-t3-bold",
             props.selected
-              ? "text-user-bubble-foreground"
+              ? "text-selection-foreground"
               : part.highlighted
                 ? "text-foreground"
                 : "text-foreground-muted",

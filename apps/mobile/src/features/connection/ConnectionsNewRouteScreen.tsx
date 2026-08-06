@@ -14,6 +14,7 @@ import { ConnectionSheetButton } from "./ConnectionSheetButton";
 import { extractPairingUrlFromQrPayload } from "./pairing";
 import { useRemoteConnections } from "../../state/use-remote-environment-registry";
 import { buildPairingUrl, parsePairingUrl } from "./pairing";
+import { resolvePersonalEnvironmentUrl } from "./personalEnvironment";
 
 type ConnectionsNewRouteParams = {
   readonly mode?: string;
@@ -29,24 +30,28 @@ export function ConnectionsNewRouteScreen({
     pairingConnectionError,
   } = useRemoteConnections();
   const navigation = useNavigation();
+  const personalEnvironmentUrl = resolvePersonalEnvironmentUrl();
   const params = route.params ?? {};
   const insets = useSafeAreaInsets();
   const [hostInput, setHostInput] = useState("");
   const [codeInput, setCodeInput] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [showScanner, setShowScanner] = useState(params.mode === "scan_qr");
+  const [showScanner, setShowScanner] = useState(
+    personalEnvironmentUrl ? false : params.mode === "scan_qr",
+  );
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
   const [scannerLocked, setScannerLocked] = useState(false);
 
   const headerIconColor = useThemeColor("--color-icon");
 
-  const connectDisabled = isSubmitting || hostInput.trim().length === 0;
+  const connectDisabled =
+    isSubmitting || hostInput.trim().length === 0 || codeInput.trim().length === 0;
 
   useEffect(() => {
     const { host, code } = parsePairingUrl(connectionPairingUrl);
-    setHostInput(host);
+    setHostInput(personalEnvironmentUrl ?? host);
     setCodeInput(code);
-  }, [connectionPairingUrl]);
+  }, [connectionPairingUrl, personalEnvironmentUrl]);
 
   useEffect(() => {
     if (pairingConnectionError) {
@@ -139,28 +144,36 @@ export function ConnectionsNewRouteScreen({
         options={{
           // Android renders its own in-screen header below instead of the native bar.
           ...(Platform.OS === "android" ? { headerShown: false } : null),
-          title: showScanner ? "Scan QR Code" : "Add Environment",
+          title: showScanner
+            ? "Scan QR Code"
+            : personalEnvironmentUrl
+              ? "Connect"
+              : "Add Environment",
         }}
       />
       {Platform.OS === "android" ? (
         <AndroidScreenHeader
           title={showScanner ? "Scan QR Code" : "Add Environment"}
           onBack={() => navigation.goBack()}
-          actions={[
-            {
-              accessibilityLabel: showScanner ? "Close scanner" : "Scan QR code",
-              icon: showScanner ? "xmark" : "camera",
-              onPress: () => {
-                if (showScanner) {
-                  closeScanner();
-                } else {
-                  void openScanner();
-                }
-              },
-            },
-          ]}
+          actions={
+            personalEnvironmentUrl
+              ? []
+              : [
+                  {
+                    accessibilityLabel: showScanner ? "Close scanner" : "Scan QR code",
+                    icon: showScanner ? "xmark" : "camera",
+                    onPress: () => {
+                      if (showScanner) {
+                        closeScanner();
+                      } else {
+                        void openScanner();
+                      }
+                    },
+                  },
+                ]
+          }
         />
-      ) : (
+      ) : personalEnvironmentUrl ? null : (
         <NativeHeaderToolbar placement="right">
           <NativeHeaderToolbar.Button
             icon={showScanner ? "xmark" : "qrcode.viewfinder"}
@@ -215,40 +228,53 @@ export function ConnectionsNewRouteScreen({
             )
           ) : (
             <View collapsable={false} className="gap-4 rounded-[24px] bg-card p-4">
-              <View collapsable={false} className="gap-1.5">
-                <Text className="text-2xs font-t3-bold tracking-[0.8px] uppercase text-foreground-muted">
-                  Host
-                </Text>
-                <TextInput
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  keyboardType="url"
-                  placeholder="192.168.1.100:8080"
-                  value={hostInput}
-                  onChangeText={handleHostChange}
-                  className="rounded-[14px] border border-input-border bg-input px-4 py-3.5 text-base text-foreground"
-                />
-              </View>
+              {personalEnvironmentUrl ? null : (
+                <View collapsable={false} className="gap-1.5">
+                  <Text className="text-2xs font-t3-bold tracking-[0.8px] uppercase text-foreground-muted">
+                    Host
+                  </Text>
+                  <TextInput
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    keyboardType="url"
+                    placeholder="192.168.1.100:8080"
+                    value={hostInput}
+                    onChangeText={handleHostChange}
+                    className="rounded-[14px] border border-input-border bg-input px-4 py-3.5 text-base text-foreground"
+                  />
+                </View>
+              )}
 
               <View collapsable={false} className="gap-1.5">
                 <Text className="text-2xs font-t3-bold tracking-[0.8px] uppercase text-foreground-muted">
-                  Pairing code
+                  {personalEnvironmentUrl ? "PIN" : "Pairing code"}
                 </Text>
                 <TextInput
+                  accessibilityLabel={personalEnvironmentUrl ? "PIN" : "Pairing code"}
                   autoCapitalize="none"
                   autoCorrect={false}
-                  placeholder="abc-123-xyz"
+                  autoFocus={Boolean(personalEnvironmentUrl)}
+                  keyboardType={personalEnvironmentUrl ? "number-pad" : "default"}
+                  maxLength={personalEnvironmentUrl ? 4 : undefined}
+                  placeholder={personalEnvironmentUrl ? "1112" : "abc-123-xyz"}
+                  secureTextEntry={Boolean(personalEnvironmentUrl)}
                   value={codeInput}
                   onChangeText={handleCodeChange}
-                  className="rounded-[14px] border border-input-border bg-input px-4 py-3.5 text-base text-foreground"
+                  className={`rounded-[14px] border border-input-border bg-input px-4 py-3.5 text-base text-foreground ${personalEnvironmentUrl ? "text-center text-xl tracking-[8px]" : ""}`}
                 />
               </View>
 
               {pairingConnectionError ? <ErrorBanner message={pairingConnectionError} /> : null}
 
               <ConnectionSheetButton
-                icon="plus"
-                label={isSubmitting ? "Pairing..." : "Add environment"}
+                icon={personalEnvironmentUrl ? "arrow.right" : "plus"}
+                label={
+                  isSubmitting
+                    ? "Connecting..."
+                    : personalEnvironmentUrl
+                      ? "Connect"
+                      : "Add environment"
+                }
                 disabled={connectDisabled}
                 tone="primary"
                 onPress={() => {

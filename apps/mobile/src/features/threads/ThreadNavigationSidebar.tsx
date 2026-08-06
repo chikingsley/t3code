@@ -1205,7 +1205,7 @@ function ThreadNavigationSidebarPane(
                 style={styles.threadList}
                 ListHeaderComponent={
                   showsConnectionStatus ? (
-                    <View className="px-1.5 pt-0.5 pb-2">
+                    <View className="pt-0.5 pb-2">
                       <WorkspaceConnectionStatus
                         onPress={props.onOpenEnvironmentSettings}
                         state={catalogState}
@@ -1337,7 +1337,7 @@ function ThreadNavigationSidebarPane(
         </View>
 
         {showsConnectionStatus ? (
-          <View className="px-3.5 pt-2.5">
+          <View className="px-4 pt-2.5">
             <WorkspaceConnectionStatus
               onPress={props.onOpenEnvironmentSettings}
               state={catalogState}
@@ -1361,6 +1361,6 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   threadListContent: {
-    paddingHorizontal: 8,
+    paddingHorizontal: 16,
   },
 });

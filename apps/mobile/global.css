@@ -19,12 +19,36 @@
   -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 36px), transparent 100%);
 }
 
+/* Keep keyboard focus inside clipped toolbar and menu surfaces. */
+[data-testid="composer-toolbar-control"]:focus,
+[data-testid="web-anchored-menu-action"]:focus {
+  outline: none !important;
+}
+
+[data-testid="composer-toolbar-control"]:focus-visible,
+[data-testid="web-anchored-menu-action"]:focus-visible {
+  box-shadow: inset 0 0 0 2px var(--color-focus-ring) !important;
+  outline: none !important;
+}
+
+/* React Native Web can retain the browser scrollbar even when the native
+   indicator prop is disabled. The sidebar keeps scrolling while its sticky
+   filter/settings controls remain visually clear. */
+[data-testid="thread-navigation-sidebar"] .legend-list-scrollbar-y-hidden {
+  scrollbar-width: none;
+}
+
+[data-testid="thread-navigation-sidebar"] .legend-list-scrollbar-y-hidden::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
 /* ─── Theme tokens ──────────────────────────────────────────────────── */
 @layer theme {
   :root {
     @variant light {
       /* Page backgrounds */
-      --color-screen: #f2f2f7;
+      --color-screen: #ffffff;
       --color-sheet: rgba(242, 242, 247, 0.98);
 
       /* Card / surface */
@@ -76,6 +100,7 @@
       --color-icon: #262626;
       --color-icon-muted: #525252;
       --color-icon-subtle: #a3a3a3;
+      --color-focus-ring: rgba(17, 17, 17, 0.32);
 
       /* Header / glass chrome */
       --color-header: rgba(255, 255, 255, 0.97);
@@ -84,7 +109,7 @@
       --color-glass-tint: rgba(255, 255, 255, 0.18);
 
       /* StatusBar */
-      --color-status-bar: #f2f2f7;
+      --color-status-bar: #ffffff;
 
       /* Markdown */
       --color-md-body: #111111;
@@ -94,16 +119,21 @@
       --color-md-blockquote-bg: rgba(0, 0, 0, 0.02);
       --color-md-code-bg: rgba(0, 0, 0, 0.04);
       --color-md-code-text: #262626;
-      --color-md-user-code-bg: rgba(255, 255, 255, 0.22);
-      --color-md-user-code-text: #ffffff;
-      --color-md-user-fence-bg: rgba(0, 0, 0, 0.16);
-      --color-md-user-fence-text: #ffffff;
+      --color-md-user-code-bg: rgba(0, 0, 0, 0.06);
+      --color-md-user-code-text: #111111;
+      --color-md-user-fence-bg: rgba(0, 0, 0, 0.06);
+      --color-md-user-fence-text: #111111;
       --color-md-hr: rgba(0, 0, 0, 0.08);
 
-      /* iMessage-style user bubble */
-      --color-user-bubble: #007aff;
-      --color-user-bubble-foreground: #ffffff;
-      --color-user-bubble-foreground-muted: rgba(255, 255, 255, 0.78);
+      /* Codex-style user message */
+      --color-user-bubble: #f2f2f2;
+      --color-user-bubble-foreground: #111111;
+      --color-user-bubble-foreground-muted: rgba(17, 17, 17, 0.62);
+
+      /* Selected navigation content */
+      --color-selection: #e8e8e8;
+      --color-selection-foreground: #111111;
+      --color-selection-foreground-muted: rgba(17, 17, 17, 0.62);
 
       /* Drawer / modal backdrop */
       --color-backdrop: rgba(0, 0, 0, 0.22);
@@ -118,7 +148,7 @@
 
     @variant dark {
       /* Page backgrounds */
-      --color-screen: #0a0a0a;
+      --color-screen: #000000;
       --color-sheet: rgba(14, 14, 14, 0.98);
 
       /* Card / surface */
@@ -170,6 +200,7 @@
       --color-icon: #f5f5f5;
       --color-icon-muted: #a3a3a3;
       --color-icon-subtle: #8e8e93;
+      --color-focus-ring: rgba(245, 245, 245, 0.38);
 
       /* Header / glass chrome */
       --color-header: rgba(10, 10, 10, 0.97);
@@ -178,7 +209,7 @@
       --color-glass-tint: rgba(23, 23, 23, 0.24);
 
       /* StatusBar */
-      --color-status-bar: #0a0a0a;
+      --color-status-bar: #000000;
 
       /* Markdown */
       --color-md-body: #e5e5e5;
@@ -188,16 +219,21 @@
       --color-md-blockquote-bg: rgba(255, 255, 255, 0.03);
       --color-md-code-bg: rgba(255, 255, 255, 0.06);
       --color-md-code-text: #e5e5e5;
-      --color-md-user-code-bg: rgba(255, 255, 255, 0.18);
+      --color-md-user-code-bg: rgba(255, 255, 255, 0.08);
       --color-md-user-code-text: #ffffff;
-      --color-md-user-fence-bg: rgba(0, 0, 0, 0.28);
+      --color-md-user-fence-bg: rgba(0, 0, 0, 0.22);
       --color-md-user-fence-text: #ffffff;
       --color-md-hr: rgba(255, 255, 255, 0.08);
 
-      /* iMessage-style user bubble */
-      --color-user-bubble: #0a84ff;
-      --color-user-bubble-foreground: #ffffff;
-      --color-user-bubble-foreground-muted: rgba(255, 255, 255, 0.78);
+      /* Codex-style user message */
+      --color-user-bubble: #212121;
+      --color-user-bubble-foreground: #f5f5f5;
+      --color-user-bubble-foreground-muted: rgba(245, 245, 245, 0.68);
+
+      /* Selected navigation content */
+      --color-selection: #262626;
+      --color-selection-foreground: #f5f5f5;
+      --color-selection-foreground-muted: rgba(245, 245, 245, 0.68);
 
       /* Drawer / modal backdrop */
       --color-backdrop: rgba(0, 0, 0, 0.48);

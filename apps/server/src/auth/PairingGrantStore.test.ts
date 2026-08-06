@@ -13,7 +13,9 @@ import { SqlitePersistenceMemory } from "../persistence/Layers/Sqlite.ts";
 import * as PairingGrantStore from "./PairingGrantStore.ts";
 
 const makeServerConfigLayer = (
-  overrides?: Partial<Pick<ServerConfig.ServerConfig["Service"], "desktopBootstrapToken">>,
+  overrides?: Partial<
+    Pick<ServerConfig.ServerConfig["Service"], "desktopBootstrapToken" | "insecureStaticPairingPin">
+  >,
 ) =>
   Layer.effect(
     ServerConfig.ServerConfig,
@@ -29,7 +31,9 @@ const makeServerConfigLayer = (
   );
 
 const makePairingGrantStoreLayer = (
-  overrides?: Partial<Pick<ServerConfig.ServerConfig["Service"], "desktopBootstrapToken">>,
+  overrides?: Partial<
+    Pick<ServerConfig.ServerConfig["Service"], "desktopBootstrapToken" | "insecureStaticPairingPin">
+  >,
 ) =>
   PairingGrantStore.layer.pipe(
     Layer.provide(SqlitePersistenceMemory),
@@ -162,6 +166,32 @@ it.layer(NodeServices.layer)("PairingGrantStore.layer", (it) => {
       Effect.provide(
         makePairingGrantStoreLayer({
           desktopBootstrapToken: "desktop-bootstrap-token",
+        }),
+      ),
+    ),
+  );
+
+  it.effect("seeds the configured static pairing PIN as a reusable standard grant", () =>
+    Effect.gen(function* () {
+      const bootstrapCredentials = yield* PairingGrantStore.PairingGrantStore;
+      const first = yield* bootstrapCredentials.consume("1112");
+      const second = yield* bootstrapCredentials.consume("1112");
+
+      expect(first.method).toBe("one-time-token");
+      expect(first.scopes).toEqual([
+        "orchestration:read",
+        "orchestration:operate",
+        "terminal:operate",
+        "review:write",
+        "relay:read",
+      ]);
+      expect(first.subject).toBe("insecure-static-pairing-pin");
+      expect(first.label).toBe("Static pairing PIN");
+      expect(second.subject).toBe("insecure-static-pairing-pin");
+    }).pipe(
+      Effect.provide(
+        makePairingGrantStoreLayer({
+          insecureStaticPairingPin: "1112",
         }),
       ),
     ),
