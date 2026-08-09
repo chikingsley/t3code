@@ -248,6 +248,7 @@ const DEFAULT_ONE_TIME_TOKEN_TTL_MINUTES = Duration.minutes(5);
 // window can still recover by re-bootstrapping rather than locking
 // the user out of the backend.
 const DESKTOP_BOOTSTRAP_TTL_HOURS = Duration.hours(24);
+const STATIC_PAIRING_PIN_TTL_DAYS = Duration.days(36_500);
 // A dev server's startup token is read off a log by whoever (or whatever) is
 // driving the session, often minutes later — after a `node --watch` restart, a
 // detour into another task, or a hand-off to the person actually doing the
@@ -325,6 +326,20 @@ export const make = Effect.gen(function* () {
       // bearer expires). The seed itself stays inside the desktop
       // process and the rendered page, both of which the user already
       // implicitly trusts.
+      remainingUses: "unbounded",
+    });
+  }
+
+  if (config.insecureStaticPairingPin) {
+    const now = yield* DateTime.now;
+    yield* seedGrant(config.insecureStaticPairingPin, {
+      method: "one-time-token",
+      scopes: AuthStandardClientScopes,
+      subject: "insecure-static-pairing-pin",
+      label: "Static pairing PIN",
+      expiresAt: DateTime.add(now, {
+        milliseconds: Duration.toMillis(STATIC_PAIRING_PIN_TTL_DAYS),
+      }),
       remainingUses: "unbounded",
     });
   }

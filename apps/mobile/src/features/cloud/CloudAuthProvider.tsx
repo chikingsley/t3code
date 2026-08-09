@@ -20,6 +20,7 @@ import {
 } from "../agent-awareness/remoteRegistration";
 import { clearConnectOnboardingRequest, requestConnectOnboarding } from "./connectOnboarding";
 import { resolveCloudPublicConfig, resolveRelayClerkTokenOptions } from "./publicConfig";
+import { resolvePersonalEnvironmentUrl } from "../connection/personalEnvironment";
 
 function resetManagedRelayTokenCache() {
   return settleAsyncResult(() =>
@@ -175,8 +176,9 @@ function CloudAuthBridge(props: { readonly children: ReactNode }) {
 
 export function CloudAuthProvider(props: { readonly children: ReactNode }) {
   const config = resolveCloudPublicConfig();
-  const publishableKey = config.clerk.publishableKey;
-  const relayUrl = config.relay.url;
+  const personalEnvironmentUrl = resolvePersonalEnvironmentUrl();
+  const publishableKey = personalEnvironmentUrl ? null : config.clerk.publishableKey;
+  const relayUrl = personalEnvironmentUrl ? null : config.relay.url;
 
   useEffect(() => {
     if (!publishableKey || !relayUrl) {

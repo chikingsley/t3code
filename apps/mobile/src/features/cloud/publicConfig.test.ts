@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vite-plus/test";
 
 import {
   CloudPublicConfigMissingError,
+  hasCloudPublicConfig,
   hasTracingPublicConfig,
   resolveCloudPublicConfig,
   resolveRelayClerkTokenOptions,
@@ -127,5 +128,15 @@ describe("resolveCloudPublicConfig", () => {
         }),
       ),
     ).toBe(true);
+  });
+
+  it("uses the personal environment instead of Clerk and relay configuration", () => {
+    const cloudConfig = resolveCloudPublicConfig({
+      clerk: { publishableKey: "pk_test_example", jwtTemplate: "t3-relay" },
+      relay: { url: "https://relay.example.test" },
+    });
+
+    expect(hasCloudPublicConfig(cloudConfig, null)).toBe(true);
+    expect(hasCloudPublicConfig(cloudConfig, "https://personal.example.test")).toBe(false);
   });
 });
