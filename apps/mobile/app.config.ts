@@ -289,6 +289,15 @@ const config: ExpoConfig = {
       },
     ],
     [
+      "expo-audio",
+      {
+        microphonePermission: "Allow T3 Code to record voice input for dictation.",
+        recordAudioAndroid: true,
+        enableBackgroundRecording: false,
+        enableBackgroundPlayback: false,
+      },
+    ],
+    [
       "expo-camera",
       {
         cameraPermission: "Allow T3 Code to access your camera so you can scan pairing QR codes.",
@@ -298,15 +307,6 @@ const config: ExpoConfig = {
       },
     ],
     ["expo-image-picker", { photosPermission: false, microphonePermission: false }],
-    [
-      "expo-audio",
-      {
-        microphonePermission: "Allow T3 Code to record voice input for dictation.",
-        recordAudioAndroid: true,
-        enableBackgroundRecording: false,
-        enableBackgroundPlayback: false,
-      },
-    ],
     [
       "expo-splash-screen",
       {
